@@ -25,6 +25,7 @@ Requires Python 3.10+; no third-party runtime packages:
 
 ```bash
 PYTHONPATH=src python3 -m isc status
+PYTHONPATH=src python3 -m isc idle
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 

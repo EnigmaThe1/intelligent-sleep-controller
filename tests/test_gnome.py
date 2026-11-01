@@ -39,7 +39,7 @@ class ReadGNOMEIdleTests(unittest.TestCase):
         self.assertEqual(read_gnome_idle_ms(), 3456)
         args, kwargs = run.call_args
         self.assertEqual(args[0][0], "gdbus")
-        self.assertIn("GetIdletime", args[0])
+        self.assertIn("org.gnome.Mutter.IdleMonitor.GetIdletime", args[0])
         self.assertEqual(kwargs["timeout"], 3.0)
         self.assertFalse(kwargs["check"])
         self.assertNotIn("shell", kwargs)
