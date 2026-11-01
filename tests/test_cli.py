@@ -55,6 +55,29 @@ class CLITests(unittest.TestCase):
         self.assertIn("Sleep delays (not permanent blockers): 1", text)
         self.assertIn("Other inhibitor locks: 1", text)
 
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2200000)
+    def test_check_never_claims_host_safe_on_idle_alone(self, idle_probe, inhibitor_probe):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        text = output.getvalue()
+        self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
+        self.assertIn("workload_coverage_unverified", text)
+        self.assertIn("scheduled_work_safety_unverified", text)
+        self.assertIn("NOT IMPLEMENTED", text)
+
+    @patch("isc.cli.read_inhibitors", return_value=None)
+    @patch("isc.cli.read_gnome_idle_ms", return_value=None)
+    def test_check_missing_probes_fail_closed(self, idle_probe, inhibitor_probe):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        text = output.getvalue()
+        self.assertIn("user_idle_unverified", text)
+        self.assertIn("sleep_inhibitor_present", text)
+        self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
+
 
 if __name__ == "__main__":
     unittest.main()

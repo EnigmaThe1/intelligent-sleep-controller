@@ -9,6 +9,7 @@ from typing import Sequence
 from . import __version__
 from .gnome import read_gnome_idle_ms
 from .inhibitors import read_inhibitors
+from .policy import Snapshot, evaluate
 
 
 def _probe(argv: list[str]) -> str:
@@ -84,13 +85,58 @@ def inhibitors() -> int:
     return 0
 
 
+def check() -> int:
+    """Explain a conservative real-host readiness check without permitting sleep."""
+    idle_ms = read_gnome_idle_ms()
+    locks = read_inhibitors()
+    blockers: tuple[str, ...]
+    if locks is None:
+        blockers = ("logind_inhibitors_unverified",)
+    else:
+        blockers = tuple(
+            f"logind_blocker_{index}"
+            for index, lock in enumerate(locks)
+            if lock.blocks_automatic_sleep
+        )
+
+    # There is not yet an authoritative supervisor or timer/wake verifier.
+    # Both must remain False even when no running jobs are discovered.
+    result = evaluate(
+        Snapshot(
+            user_idle_seconds=(idle_ms / 1000) if idle_ms is not None else None,
+            threshold_seconds=1800,
+            active_sleep_inhibitors=blockers,
+            coverage_complete=False,
+            scheduled_work_safe=False,
+        )
+    )
+    print("ISC READ-ONLY SAFETY CHECK")
+    print(f"GNOME idle: {_format_idle_ms(idle_ms)}")
+    print("Idle threshold: 1800 seconds")
+    print("Application workload coverage: NOT VERIFIED")
+    print("Scheduled work and wake safety: NOT VERIFIED")
+    print("GNOME session inhibitors: NOT VERIFIED")
+    print("Verdict: DO NOT AUTO-SUSPEND")
+    for reason in result.reasons:
+        print(f"  - {reason}")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    print("No system configuration has been changed.")
+    return 0
+
+
+def _format_idle_ms(idle_ms: int | None) -> str:
+    if idle_ms is None:
+        return "unknown"
+    return f"{idle_ms / 1000:.3f} seconds"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="Read-only foundation for future intelligent Linux sleep management",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("status", "idle", "inhibitors"), default="status"
+        "command", nargs="?", choices=("status", "idle", "inhibitors", "check"), default="status"
     )
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -99,4 +145,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return idle()
     if args.command == "inhibitors":
         return inhibitors()
+    if args.command == "check":
+        return check()
     return 2

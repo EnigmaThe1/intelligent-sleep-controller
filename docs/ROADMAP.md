@@ -13,11 +13,12 @@
 ## Phase 1 — observability
 
 - [x] Read-only GNOME D-Bus idle probe (initial standalone adapter)
-- [ ] Local work registry, event/lease contract, and TTL expiry -> UNKNOWN
+- [x] In-memory work registry, lease contract, and TTL expiry -> UNKNOWN (adapter transport/persistence pending)
 - [ ] Multi-session user-idle and active-seat discovery
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [ ] Scheduled service discovery and conservative timer safety checks
-- [ ] Monitor mode audit log with explanation of every decision
+- [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
+- [ ] Continuous MONITOR with audit log and event collection
 - [ ] Tests using synthetic system states; zero suspend actions
 
 ## Phase 2 — controlled power management

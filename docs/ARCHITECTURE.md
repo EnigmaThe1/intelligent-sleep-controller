@@ -5,7 +5,7 @@ ISC is standalone, offline, and Linux-first. This is a **design document**, not 
 ## Layers
 
 1. **Adapters** report trusted lifecycle events from independent applications; app-specific packages are optional.
-2. **Work registry** associates task IDs, process/child ownership, last-seen timestamps, and work states; lost heartbeats become UNKNOWN, **not** COMPLETED.
+2. **Work registry** now supports pure in-memory event leases with opaque task IDs, monotonic receipt times, child-work flags, and expiry -> UNKNOWN. Process/child ownership, trusted transport, persistence, and adapters remain future work. Registry emptiness after restart **cannot** establish coverage.
 3. **Safety policy** takes an explicit snapshot and returns an explainable eligibility verdict. The initial pure policy is implemented in `src/isc/policy.py`.
 4. **Operator controls** persist ON / OFF / MONITOR; Keep Awake is a separate expiring override.
 5. **Executor** (future) coordinates GNOME idle settings, systemd/logind sleep inhibitors, timer/wake checks, final pre-suspend validation, and system suspend.
@@ -45,3 +45,7 @@ Preserve other applications' existing inhibitors. Build a well-defined wake poli
 ## Privilege boundaries
 
 The user-level core is unprivileged. If privileged operations are required, expose a minimal and auditable helper with constrained inputs; do not run generic shell commands supplied by adapters. No credentials, API keys, network calls, or telemetric reporting are required.
+
+## Current monitor-only foundation
+
+A user can run `PYTHONPATH=src python3 -m isc check` to see current GNOME idle time and logind inhibitor classifications. It always withholds automatic suspension because independent workload coverage, GNOME session inhibitors, and scheduled-work/wake safety are **not yet verified**. The in-memory `WorkRegistry` is currently a library for tests and future trusted adapters, not a running daemon.

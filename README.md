@@ -27,10 +27,11 @@ Requires Python 3.10+; no third-party runtime packages:
 PYTHONPATH=src python3 -m isc status
 PYTHONPATH=src python3 -m isc idle
 PYTHONPATH=src python3 -m isc inhibitors
+PYTHONPATH=src python3 -m isc check
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The status command is read-only. It shows available system power information and explicitly reports that automatic sleep is **not implemented**.
+The commands are read-only. `check` explains why the host **must not be automatically suspended** until job coverage and timer/wake safety are verified. A pure in-memory task-lease registry now exists for future trusted adapters; no daemon or live adapter event collection is installed.
 
 ## Design and scope
 
