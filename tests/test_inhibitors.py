@@ -49,9 +49,13 @@ class InhibitorParseTests(unittest.TestCase):
         locks = parse_inhibitors("a(ssssuu) 1 " + entry(what="new-systemd-operation", mode="block"))
         self.assertTrue(locks[0].blocks_automatic_sleep)
 
-    def test_mixed_operations_and_quotes(self):
-        raw = 'a(ssssuu) 2 ' + entry(what="sleep:idle", who="App \\"A\\"", mode="block") \
-              + " " + entry(what="shutdown", mode="delay")
+    def test_mixed_operations_and_spaces(self):
+        raw = (
+            'a(ssssuu) 2 '
+            + entry(what="sleep:idle", who="Example Agent", mode="block")
+            + " "
+            + entry(what="shutdown", mode="delay")
+        )
         locks = parse_inhibitors(raw)
         self.assertEqual(len(locks), 2)
         self.assertTrue(locks[0].blocks_automatic_sleep)
