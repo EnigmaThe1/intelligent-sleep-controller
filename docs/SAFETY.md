@@ -1,0 +1,18 @@
+# Safety and release gates
+
+**Foundation status:** read-only. No automatic suspend path exists.
+
+Before any automatic sleep capability is released:
+
+1. Test the pure policy with active, external-wait, human-blocked, complete, unknown, and child-work states, including overlapping jobs.
+2. Ensure missing/expired adapters, incomplete coverage, unknown idle duration, and pending timers all reject automatic suspension.
+3. Demonstrate persistent ON / OFF / MONITOR and Keep Awake, plus clean restoration of previous GNOME settings after uninstall.
+4. Validate existing logind/systemd inhibitors, user presence, and a second pre-suspend recheck; resist races between evaluation and suspend.
+5. Test cancellation/rollback, crash recovery, system reboot, and suspend/resume failure.
+6. Verify unattended scheduled work behaviour, especially missed timers and systems that cannot wake from RTC.
+7. Validate NVIDIA/CUDA, open file handles, service reconnection, and representative long-running jobs on dedicated test hardware.
+8. Never enable automatic suspend by default during installation or CI. First deploy monitor-only, with a clear opt-in.
+9. Do not log prompt content, environment variables, process arguments, passwords, private repo paths, or tokens.
+10. Keep compatibility tests separate from any user's active development work.
+
+**Known limitations:** even an eligible pure-policy verdict is not permission to suspend. External/user activity detection and exhaustive coverage of arbitrary third-party applications remain unsolved until specific integrations and a final executor are implemented.
