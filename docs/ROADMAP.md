@@ -15,7 +15,7 @@
 - [x] Read-only GNOME D-Bus idle probe (initial standalone adapter)
 - [ ] Local work registry, event/lease contract, and TTL expiry -> UNKNOWN
 - [ ] Multi-session user-idle and active-seat discovery
-- [ ] GNOME/logind inhibitor inventory
+- [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [ ] Scheduled service discovery and conservative timer safety checks
 - [ ] Monitor mode audit log with explanation of every decision
 - [ ] Tests using synthetic system states; zero suspend actions

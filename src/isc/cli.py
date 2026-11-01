@@ -8,6 +8,7 @@ from typing import Sequence
 
 from . import __version__
 from .gnome import read_gnome_idle_ms
+from .inhibitors import read_inhibitors
 
 
 def _probe(argv: list[str]) -> str:
@@ -64,17 +65,38 @@ def idle() -> int:
     return 0
 
 
+def inhibitors() -> int:
+    locks = read_inhibitors()
+    if locks is None:
+        print("systemd-logind inhibitors: UNKNOWN (read failed or malformed)")
+        print("ISC cannot assume no sleep blockers are present.")
+    else:
+        blocking = sum(lock.blocks_automatic_sleep for lock in locks)
+        delaying = sum(lock.delays_sleep for lock in locks)
+        other = len(locks) - blocking - delaying
+        print(f"systemd-logind inhibitors: {len(locks)}")
+        print(f"Blocking automatic sleep/idle: {blocking}")
+        print(f"Sleep delays (not permanent blockers): {delaying}")
+        print(f"Other inhibitor locks: {other}")
+        print("GNOME session inhibitors and unrelated workloads: NOT YET VERIFIED")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    print("No system configuration has been changed.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="Read-only foundation for future intelligent Linux sleep management",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("status", "idle"), default="status"
+        "command", nargs="?", choices=("status", "idle", "inhibitors"), default="status"
     )
     args = parser.parse_args(argv)
     if args.command == "status":
         return status()
     if args.command == "idle":
         return idle()
+    if args.command == "inhibitors":
+        return inhibitors()
     return 2

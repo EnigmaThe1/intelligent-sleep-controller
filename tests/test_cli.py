@@ -31,6 +31,30 @@ class CLITests(unittest.TestCase):
         self.assertIn("NOT proof that background work has stopped", text)
         self.assertIn("NOT IMPLEMENTED", text)
 
+    @patch("isc.cli.read_inhibitors", return_value=None)
+    def test_inhibitor_unavailable_is_not_assumed_empty(self, probe):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["inhibitors"]), 0)
+        self.assertIn("UNKNOWN", output.getvalue())
+        self.assertIn("cannot assume no sleep blockers", output.getvalue())
+
+    @patch("isc.cli.read_inhibitors")
+    def test_inhibitors_summary_discloses_no_private_metadata(self, probe):
+        from isc.inhibitors import Inhibitor
+        probe.return_value = (
+            Inhibitor(frozenset(("sleep",)), "delay"),
+            Inhibitor(frozenset(("idle",)), "block"),
+            Inhibitor(frozenset(("shutdown",)), "block"),
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["inhibitors"]), 0)
+        text = output.getvalue()
+        self.assertIn("Blocking automatic sleep/idle: 1", text)
+        self.assertIn("Sleep delays (not permanent blockers): 1", text)
+        self.assertIn("Other inhibitor locks: 1", text)
+
 
 if __name__ == "__main__":
     unittest.main()
