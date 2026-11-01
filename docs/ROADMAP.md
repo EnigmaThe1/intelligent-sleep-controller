@@ -33,7 +33,8 @@
 
 ## Phase 3 — optional adapters
 
-- [ ] Generic application event protocol; independent of any vendor
+- [x] Pure vendor-independent lifecycle event interpreter (no transport or installed hooks)
+- [ ] Secure generic application event protocol and adapter transport; independent of any vendor
 - [ ] Claude Code and Codex task lifecycle adapters
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs
 - [ ] Active children and external waits; no idle assumptions from CPU

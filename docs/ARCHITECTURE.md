@@ -49,3 +49,9 @@ The user-level core is unprivileged. If privileged operations are required, expo
 ## Current monitor-only foundation
 
 A user can run `PYTHONPATH=src python3 -m isc check` to see current GNOME idle time and logind inhibitor classifications. It always withholds automatic suspension because independent workload coverage, GNOME session inhibitors, and scheduled-work/wake safety are **not yet verified**. The in-memory `WorkRegistry` is currently a library for tests and future trusted adapters, not a running daemon.
+
+## Conservative lifecycle-event interpretation
+
+`src/isc/events.py` is a pure adapter contract for future implementations. A tool-start event implies activity, but a permission request may be automatically resolved, and a Stop/turn-completed event may reflect only a turn boundary. Such events yield UNKNOWN; they do not permit sleep. Confirmed WAITING_HUMAN or COMPLETED states require a trusted adapter to verify **all** child work is quiescent.
+
+Vendor names in the example mapping are optional and never imply any runtime dependency. There is currently **no hook installation, local event server, authenticated transport, or guarantee that all running applications have been observed**. A future receiver must validate same-user origin and process/task ownership, never trust client-provided timestamps, reject stale events, and make missed events/failures block automatic sleep.
