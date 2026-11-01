@@ -7,12 +7,15 @@
 - [x] Pure fail-closed eligibility policy with unit tests
 - [x] Read-only `smart-sleep status` CLI
 - [x] Linux CI without actual suspend
+- [x] GNOME desktop idle-time probe with fail-closed handling
 - [ ] Review and merge
 
 ## Phase 1 — observability
 
+- [x] Read-only GNOME D-Bus idle probe (initial standalone adapter)
 - [ ] Local work registry, event/lease contract, and TTL expiry -> UNKNOWN
-- [ ] GNOME user-idle observation and logind inhibitor inventory
+- [ ] Multi-session user-idle and active-seat discovery
+- [ ] GNOME/logind inhibitor inventory
 - [ ] Scheduled service discovery and conservative timer safety checks
 - [ ] Monitor mode audit log with explanation of every decision
 - [ ] Tests using synthetic system states; zero suspend actions

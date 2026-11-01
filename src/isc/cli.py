@@ -1,4 +1,4 @@
-"""Read-only CLI for the foundation stage. Never invokes systemctl suspend."""
+"""Read-only ISC CLI. Never invokes systemctl suspend or changes settings."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import subprocess
 from typing import Sequence
 
 from . import __version__
+from .gnome import read_gnome_idle_ms
 
 
 def _probe(argv: list[str]) -> str:
@@ -19,6 +20,13 @@ def _probe(argv: list[str]) -> str:
     if done.returncode:
         return "unavailable"
     return done.stdout.strip() or "unavailable"
+
+
+def _idle_text() -> str:
+    idle_ms = read_gnome_idle_ms()
+    if idle_ms is None:
+        return "unknown (GNOME idle monitor unavailable)"
+    return f"{idle_ms / 1000:.3f} seconds ({idle_ms} ms)"
 
 
 def status() -> int:
@@ -44,7 +52,15 @@ def status() -> int:
             ]
         )
     )
+    print("GNOME user idle: " + _idle_text())
     print("No system configuration has been changed.")
+    return 0
+
+
+def idle() -> int:
+    print("GNOME user idle: " + _idle_text())
+    print("User idle time is NOT proof that background work has stopped.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
     return 0
 
 
@@ -54,9 +70,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Read-only foundation for future intelligent Linux sleep management",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("status",), default="status"
+        "command", nargs="?", choices=("status", "idle"), default="status"
     )
     args = parser.parse_args(argv)
     if args.command == "status":
         return status()
+    if args.command == "idle":
+        return idle()
     return 2
