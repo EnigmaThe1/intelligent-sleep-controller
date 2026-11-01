@@ -27,11 +27,12 @@ Requires Python 3.10+; no third-party runtime packages:
 PYTHONPATH=src python3 -m isc status
 PYTHONPATH=src python3 -m isc idle
 PYTHONPATH=src python3 -m isc inhibitors
+PYTHONPATH=src python3 -m isc processes
 PYTHONPATH=src python3 -m isc check
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The commands are read-only. `check` explains why the host **must not be automatically suspended** until job coverage and timer/wake safety are verified. A pure in-memory task-lease registry now exists for future trusted adapters; no daemon or live adapter event collection is installed.
+The commands are read-only. `check` explains why the host **must not be automatically suspended** until job coverage and timer/wake safety are verified. A pure in-memory task-lease registry now exists for future trusted adapters; the read-only `processes` command lists selected candidate process names/PIDs without reading arguments, paths, or environment variables. Process discovery **cannot** determine whether an agent is blocked or running, nor does it establish workload coverage. No daemon or live adapter event collection is installed.
 
 ## Design and scope
 

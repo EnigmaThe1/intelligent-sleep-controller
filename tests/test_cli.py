@@ -79,5 +79,38 @@ class CLITests(unittest.TestCase):
         self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
 
 
+    @patch("isc.cli.read_process_candidates")
+    def test_processes_never_claim_a_pid_is_active_or_idle(self, scanner):
+        from isc.processes import ProcessCandidate, ProcessScan
+        scanner.return_value = ProcessScan((ProcessCandidate(42, "codex"),))
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["processes"]), 0)
+        text = output.getvalue()
+        self.assertIn("pid=42 name=codex state=UNKNOWN", text)
+        self.assertIn("NOT IMPLEMENTED", text)
+
+    @patch("isc.cli.read_process_candidates", return_value=None)
+    def test_process_inventory_failure_is_unknown(self, scanner):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["processes"]), 0)
+        self.assertIn("inventory: UNKNOWN", output.getvalue())
+
+    @patch("isc.cli.read_process_candidates")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2100000)
+    def test_check_explicit_unknown_processes(self, idle, inhibitors, scanner):
+        from isc.processes import ProcessCandidate, ProcessScan
+        scanner.return_value = ProcessScan((ProcessCandidate(67, "codex"),))
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        text = output.getvalue()
+        self.assertIn("Process candidates requiring lifecycle verification: 1", text)
+        self.assertIn("work_unknown:process_67", text)
+        self.assertIn("DO NOT AUTO-SUSPEND", text)
+
+
 if __name__ == "__main__":
     unittest.main()

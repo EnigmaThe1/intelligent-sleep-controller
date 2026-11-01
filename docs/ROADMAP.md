@@ -15,6 +15,7 @@
 - [x] Read-only GNOME D-Bus idle probe (initial standalone adapter)
 - [x] In-memory work registry, lease contract, and TTL expiry -> UNKNOWN (adapter transport/persistence pending)
 - [ ] Multi-session user-idle and active-seat discovery
+- [x] Read-only current-user Linux /proc candidate inventory (lifecycle classification pending)
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [ ] Scheduled service discovery and conservative timer safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)

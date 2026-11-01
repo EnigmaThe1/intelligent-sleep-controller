@@ -9,7 +9,8 @@ from typing import Sequence
 from . import __version__
 from .gnome import read_gnome_idle_ms
 from .inhibitors import read_inhibitors
-from .policy import Snapshot, evaluate
+from .policy import Snapshot, WorkItem, WorkState, evaluate
+from .processes import read_process_candidates
 
 
 def _probe(argv: list[str]) -> str:
@@ -85,10 +86,30 @@ def inhibitors() -> int:
     return 0
 
 
+def processes() -> int:
+    """List candidate process names/PIDs without asserting workload activity."""
+    scan = read_process_candidates()
+    if scan is None:
+        print("Linux process candidate inventory: UNKNOWN")
+        print("ISC cannot assume unobserved processes are idle.")
+    else:
+        print(f"Linux process candidates (current user only): {scan.count}")
+        for item in scan.candidates[:40]:
+            print(f"  pid={item.pid} name={item.name} state=UNKNOWN")
+        if scan.count > 40:
+            print(f"  ... {scan.count - 40} more candidates not shown")
+        print("This inventory is illustrative, not exhaustive.")
+        print("A process name does NOT prove task activity or completion.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    print("No system configuration has been changed.")
+    return 0
+
+
 def check() -> int:
     """Explain a conservative real-host readiness check without permitting sleep."""
     idle_ms = read_gnome_idle_ms()
     locks = read_inhibitors()
+    scan = read_process_candidates()
     blockers: tuple[str, ...]
     if locks is None:
         blockers = ("logind_inhibitors_unverified",)
@@ -108,11 +129,22 @@ def check() -> int:
             active_sleep_inhibitors=blockers,
             coverage_complete=False,
             scheduled_work_safe=False,
+            work_items=tuple(
+                WorkItem(
+                    identifier=f"process_{candidate.pid}",
+                    state=WorkState.UNKNOWN,
+                )
+                for candidate in (scan.candidates if scan is not None else ())
+            ),
         )
     )
     print("ISC READ-ONLY SAFETY CHECK")
     print(f"GNOME idle: {_format_idle_ms(idle_ms)}")
     print("Idle threshold: 1800 seconds")
+    if scan is None:
+        print("Process candidate inventory: UNKNOWN")
+    else:
+        print(f"Process candidates requiring lifecycle verification: {scan.count}")
     print("Application workload coverage: NOT VERIFIED")
     print("Scheduled work and wake safety: NOT VERIFIED")
     print("GNOME session inhibitors: NOT VERIFIED")
@@ -136,7 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Read-only foundation for future intelligent Linux sleep management",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("status", "idle", "inhibitors", "check"), default="status"
+        "command", nargs="?", choices=("status", "idle", "inhibitors", "processes", "check"), default="status"
     )
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -145,6 +177,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return idle()
     if args.command == "inhibitors":
         return inhibitors()
+    if args.command == "processes":
+        return processes()
     if args.command == "check":
         return check()
     return 2
