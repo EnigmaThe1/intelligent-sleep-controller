@@ -211,6 +211,11 @@ def monitor(*, seconds: float, self_test: bool = False, advertise: bool = False)
             print(f"Rejected metadata events: {listener.rejected}")
             print(f"Conservative active events: {listener.counts['active']}")
             print(f"Conservative unknown events: {listener.counts['unknown']}")
+            print("Accepted event types (no session IDs):")
+            if not listener.event_counts:
+                print("  none")
+            for (source, event), count in sorted(listener.event_counts.items()):
+                print(f"  {source}/{event}: {count}")
             print("Full workload coverage: NOT VERIFIED")
             print("ISC automatic suspend: NOT IMPLEMENTED")
             print("No services, hooks, or power settings were modified.")

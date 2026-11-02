@@ -35,7 +35,7 @@
 
 - [x] Pure vendor-independent lifecycle event interpreter (no transport or installed hooks)
 - [x] Strict privacy-minimal hook payload parser and synthetic read-only CLI (no installation)
-- [x] Ephemeral same-user Unix-socket event transport and bounded foreground monitor (not authoritative coverage)
+- [x] Ephemeral same-user Unix-socket event transport, aggregate event counters, and bounded foreground monitor (not authoritative coverage)
 - [x] Opt-in temporary private socket discovery and non-blocking hook relay (vendor configurations untouched)
 - [ ] Persistent authenticated/supervised adapter transport with integrity and loss detection
 - [x] Read-only Claude Code and Codex hook integration plan (no config modifications)

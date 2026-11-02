@@ -166,6 +166,7 @@ class LocalMonitor:
         self.path = self._dir / "events.sock"
         self.registry = WorkRegistry()
         self.counts: Counter[str] = Counter()
+        self.event_counts: Counter[tuple[str, str]] = Counter()
         self.accepted = 0
         self.rejected = 0
         self._closed = False
@@ -226,6 +227,7 @@ class LocalMonitor:
                     now=time.monotonic(), ttl_seconds=30.0
                 )
                 self.counts[state.value] += 1
+                self.event_counts[(source, event_name)] += 1
                 self.accepted += 1
             except (OSError, ValueError, socket.timeout):
                 self.rejected += 1

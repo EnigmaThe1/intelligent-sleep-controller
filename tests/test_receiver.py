@@ -89,6 +89,21 @@ class ReceiverTests(unittest.TestCase):
             item, = server.registry.observed_work(now=__import__("time").monotonic())
             self.assertEqual(item.state, WorkState.UNKNOWN)
 
+    def test_event_counters_are_only_validated_source_and_type(self):
+        with LocalMonitor(runtime_dir=self.base) as server:
+            self.assertTrue(send_observation(
+                server.path, observed("SessionStart", session="SECRET_SESSION_1"),
+            ))
+            self.assertTrue(send_observation(
+                server.path, observed("Stop", session="SECRET_SESSION_2"),
+            ))
+            server.run_for(0.05)
+            self.assertEqual(server.accepted, 2)
+            self.assertEqual(server.event_counts[("codex", "SessionStart")], 1)
+            self.assertEqual(server.event_counts[("codex", "Stop")], 1)
+            self.assertNotIn("SECRET_SESSION", repr(server.event_counts))
+            self.assertEqual(len(server.event_counts), 2)
+
     def test_active_and_stop_events_are_separate(self):
         with LocalMonitor(runtime_dir=self.base) as server:
             self.assertTrue(send_observation(server.path, observed("PreToolUse")))
