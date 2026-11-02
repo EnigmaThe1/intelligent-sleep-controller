@@ -39,7 +39,8 @@
 - [x] Opt-in temporary private socket discovery and non-blocking hook relay (vendor configurations untouched)
 - [ ] Persistent authenticated/supervised adapter transport with integrity and loss detection
 - [x] Read-only Claude Code and Codex hook integration plan (no config modifications)
-- [ ] Opt-in, reversible Claude Code and Codex hook integration with trusted source verification
+- [x] Optional single-source append-only hook enable/disable with private backups, isolated tests (not yet applied on user host)
+- [ ] Trusted agent-origin verification and authenticated process supervision
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs
 - [ ] Active children and external waits; no idle assumptions from CPU
 - [ ] Optional desktop toggle

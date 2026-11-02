@@ -67,6 +67,17 @@ PYTHONPATH=src python3 -m isc hook-plan
 
 This inspects **only** the structure of existing user-level `~/.claude/settings.json` and `~/.codex/hooks.json`, and reports which supported event groups ISC would need. It never prints existing handler commands, application secrets, prompts or other configuration values. It does not write or install anything, does not open a socket and does not run either coding agent. `~/.codex/config.toml` is deliberately **not modified**. A separate opt-in implementation and trust review are required to install hooks safely; Codex may require the user to approve the new hook definition in `/hooks`.
 
+### Explicit opt-in hook installation (not run automatically)
+
+A separate command can add ISC-only handler groups **after** you explicitly authorize one source using `--confirm`, or remove those exact groups:
+
+```bash
+PYTHONPATH=src python3 -m isc hook-enable --source codex --confirm
+PYTHONPATH=src python3 -m isc hook-disable --source codex --confirm
+```
+
+Do **not** run these until you've reviewed the tested plan and confirmed that ISC's monitor-only hooks should be enabled. Each modification produces a private (0600) recovery backup in the agent's configuration directory. It leaves existing hook groups in place and appends ISC groups, or removes only exact ISC-created groups. The target is rewritten atomically with a best-effort last-moment race check. External editors that ignore ISC's advisory lock could still race; refrain from modifying the same file concurrently. It never executes either coding agent or enables sleep. Codex may require separate hook trust review. For the safest uninstall, use the targeted `hook-disable`, not a whole-file backup restoration that could discard later settings.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)

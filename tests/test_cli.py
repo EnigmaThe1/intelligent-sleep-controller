@@ -172,5 +172,34 @@ class CLITests(unittest.TestCase):
             self.assertNotIn("command", text.lower().split("no existing hook")[0])
 
 
+    @patch("isc.cli.modify_existing_hooks")
+    def test_hook_enable_requires_explicit_confirm(self, writer):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(
+                main(["hook-enable", "--source", "codex"]), 2,
+            )
+        writer.assert_not_called()
+        self.assertIn("No changes made", output.getvalue())
+
+    @patch("isc.cli.modify_existing_hooks")
+    @patch("isc.cli.default_hook_targets")
+    def test_hook_disable_only_selected_source(self, targets, writer):
+        from isc.hook_install import InstallResult
+        targets.return_value = (("codex", Path("/tmp/test-codex.json")),)
+        writer.return_value = InstallResult(
+            "codex", "disable", 8, True, Path("/tmp/private-backup"),
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(
+                main(["hook-disable", "--source", "codex", "--confirm"]), 0,
+            )
+        writer.assert_called_once_with(
+            "codex", Path("/tmp/test-codex.json"), "disable",
+        )
+        self.assertIn("8 event group(s)", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

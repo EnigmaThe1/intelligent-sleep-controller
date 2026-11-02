@@ -11,6 +11,7 @@ from . import __version__
 from .gnome import read_gnome_idle_ms
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
+from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
@@ -259,6 +260,28 @@ def hook_plan() -> int:
     return rc
 
 
+def hook_change(*, source: str, operation: str, confirm: bool) -> int:
+    """Explicitly requested single-source hook update; never runs an agent."""
+    if not confirm:
+        print("No changes made. Use --confirm to authorize this operation.")
+        return 2
+    target = dict(default_hook_targets())[source]
+    try:
+        outcome = modify_existing_hooks(source, target, operation)
+    except (HookInstallError, ValueError):
+        print("ISC hook operation refused: configuration unsafe or changed.")
+        print("Existing hooks were not intentionally replaced.")
+        return 2
+    if outcome.changed:
+        print(f"ISC {operation}: {outcome.affected_event_groups} event group(s)")
+        print(f"Private recovery backup: {outcome.backup}")
+        print("No coding agent was executed.")
+    else:
+        print("No change required; existing hook registration already matches.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -266,7 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable"),
         default="status",
     )
     parser.add_argument(
@@ -277,6 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--self-test", action="store_true", help="Send one synthetic Stop event to the private monitor")
     parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
+    parser.add_argument("--confirm", action="store_true", help="Explicitly authorize one selected hook change")
     args = parser.parse_args(argv)
     if args.command == "status":
         return status()
@@ -296,6 +320,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return monitor(seconds=args.seconds, self_test=args.self_test, advertise=args.advertise)
     if args.command == "hook-plan":
         return hook_plan()
+    if args.command in ("hook-enable", "hook-disable"):
+        if args.source is None:
+            parser.error("select --source claude_code or --source codex")
+        return hook_change(
+            source=args.source,
+            operation="enable" if args.command == "hook-enable" else "disable",
+            confirm=args.confirm,
+        )
     if args.command == "send-hook":
         if args.source is None:
             parser.error("send-hook requires --source")

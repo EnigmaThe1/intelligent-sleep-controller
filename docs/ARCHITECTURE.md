@@ -77,3 +77,9 @@ Same-UID identity is not proof that an agent or process owns an event: other sam
 ## Hook integration preview (no installation)
 
 `hook-plan` reads the two user-level JSON hook files and displays only counts and proposed event names. It creates an absolute, cwd-independent ISC sender command for future append-only integrations, without installing or printing that command. Existing hook groups must never be replaced, reordered, disabled, or executed by this process. Codex's inline TOML hook state remains untouched. Any future apply/remove command requires a separate review, crash-safe backup, race-aware atomic write, idempotence, and source-specific approval. Codex can require user trust via `/hooks` before a new definition executes. Merely receiving a hook event does not establish real workload coverage.
+
+## Explicit hook lifecycle management (opt-in)
+
+`hook-enable` and `hook-disable` require `--source` and `--confirm`, operate on exactly one user-owned JSON target, use an ISC advisory lock, create a 0600 backup and write with a staging file and atomic rename. Existing hook groups are retained and remain in their original array order. Uninstallation removes only the exact ISC-generated group structure rather than overwriting later user edits. No install is implicit or performed by the project itself; the user chooses when to enable handlers. Concurrent external editors not participating in the lock remain a limitation; ISC compares the original file before replacement and refuses detectable conflicts.
+
+ISC hook handlers use asynchronous command hooks except for `SessionEnd`, which is synchronous under Codex. The receiver remains monitor-only and has no authoritative proof of session ownership, completed child jobs, or full workload coverage. Codex trust review may be required.
