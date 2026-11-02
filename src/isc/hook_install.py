@@ -21,7 +21,7 @@ from typing import Literal
 
 from .hook_plan import (
     EVENTS, MAX_CONFIG_BYTES, SUPPORTED_HOOK_SOURCES,
-    UnsafeHookConfiguration, hook_command,
+    hook_command,
 )
 
 Operation = Literal["enable", "disable"]
@@ -70,17 +70,17 @@ def transform_hooks(data: dict, source: str, operation: Operation) -> tuple[dict
     if source not in SUPPORTED_HOOK_SOURCES or operation not in ("enable", "disable"):
         raise ValueError("invalid_source_or_operation")
     if not isinstance(data, dict) or not isinstance(data.get("hooks"), dict):
-        raise UnsafeHookConfiguration("invalid_hook_config")
+        raise HookInstallError("invalid_hook_config")
     result = deepcopy(data)
     hooks = result["hooks"]
     for event, groups in hooks.items():
         if not isinstance(event, str) or not isinstance(groups, list):
-            raise UnsafeHookConfiguration("malformed_event_groups")
+            raise HookInstallError("malformed_event_groups")
         for group in groups:
             if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-                raise UnsafeHookConfiguration("malformed_group")
+                raise HookInstallError("malformed_group")
             if not all(isinstance(handler, dict) for handler in group["hooks"]):
-                raise UnsafeHookConfiguration("malformed_handler")
+                raise HookInstallError("malformed_handler")
     altered = 0
     for event in EVENTS:
         present = _owned_groups(hooks, source, event)
