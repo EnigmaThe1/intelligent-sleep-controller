@@ -13,7 +13,7 @@ from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
-from .receiver import LocalMonitor, send_observation
+from .receiver import LocalMonitor, send_observation, send_discovered_observation
 
 
 def _probe(argv: list[str]) -> str:
@@ -182,12 +182,12 @@ def hook_probe(source: str) -> int:
     return 0
 
 
-def monitor(*, seconds: float, self_test: bool = False) -> int:
+def monitor(*, seconds: float, self_test: bool = False, advertise: bool = False) -> int:
     """Ephemeral foreground monitor; creates only a private runtime socket."""
     import json
 
     try:
-        with LocalMonitor() as listener:
+        with LocalMonitor(advertise=advertise) as listener:
             print("ISC FOREGROUND MONITOR (NO SUSPEND)")
             print(f"Private Unix socket: {listener.path}", flush=True)
             if self_test:
@@ -197,9 +197,11 @@ def monitor(*, seconds: float, self_test: bool = False) -> int:
                 }).encode()
                 from .hook_payload import parse_hook_payload
                 observation = parse_hook_payload("codex", raw)
-                if observation is None or not send_observation(
-                    listener.path, observation
-                ):
+                delivered = (
+                    send_discovered_observation(observation) if advertise
+                    else send_observation(listener.path, observation)
+                ) if observation is not None else False
+                if not delivered:
                     print("Synthetic test event could not be queued.")
                     return 2
             listener.run_for(seconds)
@@ -218,14 +220,17 @@ def monitor(*, seconds: float, self_test: bool = False) -> int:
         return 2
 
 
-def send_hook(*, source: str, socket_path: str) -> int:
+def send_hook(*, source: str, socket_path: str | None = None) -> int:
     """Optional future hook entry; fail-open and silent by design.
 
     This is not installed automatically into Claude Code or Codex.
     """
     observation = read_hook_payload(source, sys.stdin.buffer)
     if observation is not None:
-        send_observation(socket_path, observation)
+        if socket_path is None:
+            send_discovered_observation(observation)
+        else:
+            send_observation(socket_path, observation)
     return 0
 
 
@@ -245,6 +250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--seconds", type=float, default=1.0, help="Foreground monitor runtime, max 300 seconds")
     parser.add_argument("--self-test", action="store_true", help="Send one synthetic Stop event to the private monitor")
+    parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -262,9 +268,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error("hook-probe requires --source")
         return hook_probe(args.source)
     if args.command == "monitor":
-        return monitor(seconds=args.seconds, self_test=args.self_test)
+        return monitor(seconds=args.seconds, self_test=args.self_test, advertise=args.advertise)
     if args.command == "send-hook":
-        if args.source is None or args.socket_path is None:
-            parser.error("send-hook requires --source and --socket-path")
+        if args.source is None:
+            parser.error("send-hook requires --source")
         return send_hook(source=args.source, socket_path=args.socket_path)
     return 2

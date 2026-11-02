@@ -53,7 +53,9 @@ On a Linux user session with a private `XDG_RUNTIME_DIR`, the following starts a
 PYTHONPATH=src python3 -m isc monitor --seconds 1 --self-test
 ```
 
-The socket is placed inside a new private runtime directory and removed after the monitor exits. A separate `send-hook --source codex --socket-path <path>` command can relay a bounded, sanitised JSON hook message from standard input, **but it is not installed in any agent**. Any transport failure returns success to the calling application, and it never writes to stdout. Receiving an event does not certify its origin beyond the operating-system user or make sleep eligible.
+The default socket is placed inside a new private runtime directory and removed after the monitor exits. A separate `send-hook --source codex --socket-path <path>` command can relay a bounded, sanitised JSON hook message from standard input, **but it is not installed in any agent**.
+
+For safe cross-process discovery, `monitor --advertise` creates a *predictable, private* temporary socket at `$XDG_RUNTIME_DIR/isc-monitor/events.sock`. This refuses to replace any existing directory, never alters a vendor configuration, and removes its own socket and directory on normal exit. `send-hook --source codex` can then discover the temporary socket automatically and returns success silently even when no listener exists. An example test uses `PYTHONPATH=src python3 -m isc monitor --seconds 1 --self-test --advertise`. No receiver is installed as a background service. Any transport failure returns success to the calling application, and it never writes to stdout. Receiving an event does not certify its origin beyond the operating-system user or make sleep eligible.
 
 This temporary foreground experiment is **not** the future persistent ON/OFF/MONITOR configuration. Automatic suspension and service installation remain unimplemented.
 

@@ -131,5 +131,20 @@ class CLITests(unittest.TestCase):
         self.assertIn("NOT IMPLEMENTED", text)
 
 
+    @patch("isc.cli.send_discovered_observation", return_value=False)
+    @patch("isc.cli.read_hook_payload")
+    def test_sender_remains_silent_when_no_receiver(self, read, relay):
+        from isc.hook_payload import HookObservation
+        from isc.policy import WorkState
+        read.return_value = HookObservation(
+            "codex", "Stop", "f" * 32, WorkState.UNKNOWN,
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["send-hook", "--source", "codex"]), 0)
+        self.assertEqual(output.getvalue(), "")
+        relay.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

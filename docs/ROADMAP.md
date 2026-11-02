@@ -36,6 +36,7 @@
 - [x] Pure vendor-independent lifecycle event interpreter (no transport or installed hooks)
 - [x] Strict privacy-minimal hook payload parser and synthetic read-only CLI (no installation)
 - [x] Ephemeral same-user Unix-socket event transport and bounded foreground monitor (not authoritative coverage)
+- [x] Opt-in temporary private socket discovery and non-blocking hook relay (vendor configurations untouched)
 - [ ] Persistent authenticated/supervised adapter transport with integrity and loss detection
 - [ ] Claude Code and Codex task lifecycle adapters
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs

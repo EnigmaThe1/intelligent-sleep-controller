@@ -23,6 +23,62 @@ from .events import hook_observation, interpret
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
 
+MONITOR_DIRECTORY_NAME = "isc-monitor"
+
+
+def _private_runtime_root(runtime_dir: str | Path | None) -> Path:
+    if runtime_dir is None:
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
+    if not runtime_dir:
+        raise OSError("No private XDG_RUNTIME_DIR is available")
+    root = Path(runtime_dir)
+    root_stat = root.lstat()
+    if (
+        not stat.S_ISDIR(root_stat.st_mode)
+        or root_stat.st_uid != os.getuid()
+        or root_stat.st_mode & 0o077
+    ):
+        raise PermissionError("Runtime directory must be owned and private")
+    return root
+
+
+def discover_monitor_socket(*, runtime_dir: str | Path | None = None) -> Path | None:
+    """Discover ONLY an explicitly advertised, private same-user Unix socket.
+
+    Never create, delete, or modify any path while discovering a monitor.
+    A discovered socket does not authenticate an application's event.
+    """
+    try:
+        root = _private_runtime_root(runtime_dir)
+        directory = root / MONITOR_DIRECTORY_NAME
+        directory_stat = directory.lstat()
+        if (
+            not stat.S_ISDIR(directory_stat.st_mode)
+            or directory_stat.st_uid != os.getuid()
+            or directory_stat.st_mode & 0o077
+        ):
+            return None
+        address = directory / "events.sock"
+        sock_stat = address.lstat()
+        if (
+            not stat.S_ISSOCK(sock_stat.st_mode)
+            or sock_stat.st_uid != os.getuid()
+            or sock_stat.st_mode & 0o077
+        ):
+            return None
+        return address
+    except (OSError, ValueError):
+        return None
+
+
+def send_discovered_observation(
+    observation: HookObservation, *, runtime_dir: str | Path | None = None
+) -> bool:
+    """No monitor? Do nothing. Never wait for one or block an agent."""
+    address = discover_monitor_socket(runtime_dir=runtime_dir)
+    return False if address is None else send_observation(address, observation)
+
+
 MAX_MESSAGE_BYTES = 1024
 _EVENT = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z", re.ASCII)
 _FINGERPRINT = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
@@ -96,20 +152,17 @@ def send_observation(path: str | Path, observation: HookObservation) -> bool:
 class LocalMonitor:
     """Time-bounded foreground monitor in a private runtime subdirectory."""
 
-    def __init__(self, *, runtime_dir: str | Path | None = None) -> None:
-        if runtime_dir is None:
-            runtime_dir = os.environ.get("XDG_RUNTIME_DIR", "")
-        if not runtime_dir:
-            raise OSError("No private XDG_RUNTIME_DIR is available")
-        root = Path(runtime_dir)
-        root_stat = root.stat()
-        if (
-            not stat.S_ISDIR(root_stat.st_mode)
-            or root_stat.st_uid != os.getuid()
-            or root_stat.st_mode & 0o077
-        ):
-            raise PermissionError("Runtime directory must be owned and private")
-        self._dir = Path(tempfile.mkdtemp(prefix="isc-", dir=root))
+    def __init__(
+        self, *, runtime_dir: str | Path | None = None,
+        advertise: bool = False,
+    ) -> None:
+        root = _private_runtime_root(runtime_dir)
+        if advertise:
+            # Fail rather than clobber another instance or an orphaned path.
+            self._dir = root / MONITOR_DIRECTORY_NAME
+            self._dir.mkdir(mode=0o700)
+        else:
+            self._dir = Path(tempfile.mkdtemp(prefix="isc-", dir=root))
         self.path = self._dir / "events.sock"
         self.registry = WorkRegistry()
         self.counts: Counter[str] = Counter()

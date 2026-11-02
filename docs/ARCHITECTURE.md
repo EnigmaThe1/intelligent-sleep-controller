@@ -67,3 +67,9 @@ Hook input is untrusted. A fingerprint is **not an authentication token**. A fut
 The optional `LocalMonitor` creates a temporary user-owned directory (0700) under the private `XDG_RUNTIME_DIR` and a Unix stream socket (0600). It checks Linux `SO_PEERCRED` and accepts only same-UID peers. Input is capped at 1024 bytes and includes **only** a source label, event name, and fingerprinted session identifier. The receiver derives states from known events; it does not accept a client-provided `COMPLETED` or `WAITING_HUMAN` state, and expires its in-memory task leases to UNKNOWN.
 
 Same-UID identity is not proof that an agent or process owns an event: other same-UID programs can send spoofed events. The receiver therefore **never** declares workload coverage complete. Stale/undelivered events, incomplete child-process awareness, background jobs, unrepresented sessions, and scheduled-work risks continue to prohibit automatic sleep. No source configuration is changed and no sleep executor exists.
+
+## Opt-in socket discovery
+
+`monitor --advertise` creates the predictable directory `$XDG_RUNTIME_DIR/isc-monitor` with mode 0700 and its socket with mode 0600. It **fails without overwriting** an existing directory. The discovery client uses `lstat` to reject symlinks and checks current-user ownership and private permissions before forwarding. Normal monitor exit unlinks only its own socket inode and removes its own empty directory. A force-killed monitor can leave a stale directory that must be recovered explicitly; ISC never deletes someone else's files.
+
+`send-hook --source ...` is a silent, best-effort client with a short connection timeout. It is not enabled in Claude Code or Codex. Same-UID discovery and receipt provide *no* proof that session completion or workload coverage is authoritative; automatic sleep remains unimplemented.
