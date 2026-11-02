@@ -146,5 +146,31 @@ class CLITests(unittest.TestCase):
         relay.assert_called_once()
 
 
+    @patch("isc.cli.default_hook_targets")
+    def test_hook_plan_shows_only_event_names_no_commands(self, targets):
+        from tempfile import TemporaryDirectory
+        import json
+        with TemporaryDirectory() as root:
+            path = Path(root) / "config.json"
+            path.write_text(json.dumps({
+                "hooks": {
+                    "Stop": [{"hooks": [{
+                        "type": "command", "command": "PRIVATE_PASSWORD"
+                    }]}
+                },
+                "env": {"TOKEN": "DO_NOT_DISPLAY"},
+            }), encoding="utf-8")
+            targets.return_value = (("codex", path),)
+            output = StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["hook-plan"]), 0)
+            text = output.getvalue()
+            self.assertIn("ISC hook event groups proposed: 8", text)
+            self.assertIn("+ Stop", text)
+            self.assertNotIn("PRIVATE_PASSWORD", text)
+            self.assertNotIn("DO_NOT_DISPLAY", text)
+            self.assertNotIn("command", text.lower().split("no existing hook")[0])
+
+
 if __name__ == "__main__":
     unittest.main()

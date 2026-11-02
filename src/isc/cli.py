@@ -10,6 +10,7 @@ from typing import Sequence
 from . import __version__
 from .gnome import read_gnome_idle_ms
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
+from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
@@ -234,6 +235,30 @@ def send_hook(*, source: str, socket_path: str | None = None) -> int:
     return 0
 
 
+def hook_plan() -> int:
+    """Only show a minimal integration summary; never output commands or secrets."""
+    print("ISC HOOK INTEGRATION PLAN — READ ONLY")
+    rc = 0
+    for source, target in default_hook_targets():
+        print(f"{source}:")
+        try:
+            plan = build_hook_plan(source, target)
+        except (ValueError, UnsafeHookConfiguration):
+            print("  configuration: UNAVAILABLE OR UNSUPPORTED")
+            print("  action: NONE")
+            rc = 2
+            continue
+        print(f"  existing configured event types: {len(plan.configured_events)}")
+        print(f"  ISC hook events already present: {len(plan.already_installed)}")
+        print(f"  ISC hook event groups proposed: {len(plan.proposed_events)}")
+        for event in plan.proposed_events:
+            print(f"    + {event}")
+        print("  no existing hook commands or settings displayed")
+    print("No files modified. No hook commands executed.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return rc
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -241,7 +266,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan"),
         default="status",
     )
     parser.add_argument(
@@ -269,6 +294,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return hook_probe(args.source)
     if args.command == "monitor":
         return monitor(seconds=args.seconds, self_test=args.self_test, advertise=args.advertise)
+    if args.command == "hook-plan":
+        return hook_plan()
     if args.command == "send-hook":
         if args.source is None:
             parser.error("send-hook requires --source")

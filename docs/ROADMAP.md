@@ -38,7 +38,8 @@
 - [x] Ephemeral same-user Unix-socket event transport and bounded foreground monitor (not authoritative coverage)
 - [x] Opt-in temporary private socket discovery and non-blocking hook relay (vendor configurations untouched)
 - [ ] Persistent authenticated/supervised adapter transport with integrity and loss detection
-- [ ] Claude Code and Codex task lifecycle adapters
+- [x] Read-only Claude Code and Codex hook integration plan (no config modifications)
+- [ ] Opt-in, reversible Claude Code and Codex hook integration with trusted source verification
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs
 - [ ] Active children and external waits; no idle assumptions from CPU
 - [ ] Optional desktop toggle

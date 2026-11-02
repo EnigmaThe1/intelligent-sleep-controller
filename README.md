@@ -59,6 +59,14 @@ For safe cross-process discovery, `monitor --advertise` creates a *predictable, 
 
 This temporary foreground experiment is **not** the future persistent ON/OFF/MONITOR configuration. Automatic suspension and service installation remain unimplemented.
 
+### Preview optional Claude Code and Codex integration (read-only)
+
+```bash
+PYTHONPATH=src python3 -m isc hook-plan
+```
+
+This inspects **only** the structure of existing user-level `~/.claude/settings.json` and `~/.codex/hooks.json`, and reports which supported event groups ISC would need. It never prints existing handler commands, application secrets, prompts or other configuration values. It does not write or install anything, does not open a socket and does not run either coding agent. `~/.codex/config.toml` is deliberately **not modified**. A separate opt-in implementation and trust review are required to install hooks safely; Codex may require the user to approve the new hook definition in `/hooks`.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)
