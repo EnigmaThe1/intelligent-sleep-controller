@@ -139,11 +139,12 @@ class LocalMonitor:
         with connection:
             connection.settimeout(0.2)
             try:
-                if not hasattr(socket, "SO_PEERCRED"):
+                credential_option = getattr(socket, "SO_PEERCRED", None)
+                if not isinstance(credential_option, int):
                     self.rejected += 1
                     return
                 raw = connection.getsockopt(
-                    socket.SOL_SOCKET, socket.SO_PEERCRED,
+                    socket.SOL_SOCKET, credential_option,
                     struct.calcsize("3i")
                 )
                 _pid, uid, _gid = struct.unpack("3i", raw)
