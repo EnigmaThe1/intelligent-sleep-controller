@@ -112,5 +112,24 @@ class CLITests(unittest.TestCase):
         self.assertIn("DO NOT AUTO-SUSPEND", text)
 
 
+    @patch("isc.cli.read_hook_payload")
+    def test_hook_probe_does_not_print_private_fields(self, parser):
+        from isc.hook_payload import HookObservation
+        from isc.policy import WorkState
+        parser.return_value = HookObservation(
+            source="claude_code",
+            event_name="Stop",
+            session_fingerprint="abc123secret",
+            state=WorkState.UNKNOWN,
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["hook-probe", "--source", "claude_code"]), 0)
+        text = output.getvalue()
+        self.assertIn("Conservative interpretation: unknown", text)
+        self.assertNotIn("abc123secret", text)
+        self.assertIn("NOT IMPLEMENTED", text)
+
+
 if __name__ == "__main__":
     unittest.main()

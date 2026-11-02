@@ -55,3 +55,9 @@ A user can run `PYTHONPATH=src python3 -m isc check` to see current GNOME idle t
 `src/isc/events.py` is a pure adapter contract for future implementations. A tool-start event implies activity, but a permission request may be automatically resolved, and a Stop/turn-completed event may reflect only a turn boundary. Such events yield UNKNOWN; they do not permit sleep. Confirmed WAITING_HUMAN or COMPLETED states require a trusted adapter to verify **all** child work is quiescent.
 
 Vendor names in the example mapping are optional and never imply any runtime dependency. There is currently **no hook installation, local event server, authenticated transport, or guarantee that all running applications have been observed**. A future receiver must validate same-user origin and process/task ownership, never trust client-provided timestamps, reject stale events, and make missed events/failures block automatic sleep.
+
+## Optional command-hook payload parser
+
+`src/isc/hook_payload.py` reads at most 64 KiB from an explicitly provided binary stream. It admits only the documented common `session_id` and `hook_event_name` fields, hashes the session ID and drops the rest of the payload. The probe CLI outputs no session fingerprint or raw hook input. No content from `tool_input`, `tool_response`, `last_assistant_message`, `transcript_path`, `cwd`, or environment is retained or logged.
+
+Hook input is untrusted. A fingerprint is **not an authentication token**. A future authenticated local receiver must track event loss, source ownership, supervision of active children, and cross-session workload coverage before using any event to decide that sleep is safe. A command hook invocation must never block or modify the original application's execution.

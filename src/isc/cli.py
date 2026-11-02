@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import subprocess
 from typing import Sequence
 
 from . import __version__
 from .gnome import read_gnome_idle_ms
+from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
@@ -162,13 +164,36 @@ def _format_idle_ms(idle_ms: int | None) -> str:
     return f"{idle_ms / 1000:.3f} seconds"
 
 
+def hook_probe(source: str) -> int:
+    """Inspect supplied hook JSON; never installs a hook or stores an event."""
+    observation = read_hook_payload(source, sys.stdin.buffer)
+    print("ISC HOOK PAYLOAD PROBE (READ-ONLY)")
+    if observation is None:
+        print("Observation: UNKNOWN (missing, malformed, or oversized input)")
+    else:
+        print(f"Source: {observation.source}")
+        print(f"Event: {observation.event_name}")
+        print(f"Conservative interpretation: {observation.state.value}")
+        print("Session identifier: fingerprinted in memory, not displayed")
+    print("Hook event origin and child-work quiescence: NOT VERIFIED")
+    print("No hook configuration has been modified.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="Read-only foundation for future intelligent Linux sleep management",
     )
     parser.add_argument(
-        "command", nargs="?", choices=("status", "idle", "inhibitors", "processes", "check"), default="status"
+        "command", nargs="?",
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe"),
+        default="status",
+    )
+    parser.add_argument(
+        "--source", choices=sorted(SUPPORTED_SOURCES),
+        help="Source application for the read-only hook-probe command",
     )
     args = parser.parse_args(argv)
     if args.command == "status":
@@ -181,4 +206,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return processes()
     if args.command == "check":
         return check()
+    if args.command == "hook-probe":
+        if args.source is None:
+            parser.error("hook-probe requires --source")
+        return hook_probe(args.source)
     return 2
