@@ -13,6 +13,7 @@ from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
+from .receiver import LocalMonitor, send_observation
 
 
 def _probe(argv: list[str]) -> str:
@@ -181,6 +182,53 @@ def hook_probe(source: str) -> int:
     return 0
 
 
+def monitor(*, seconds: float, self_test: bool = False) -> int:
+    """Ephemeral foreground monitor; creates only a private runtime socket."""
+    import json
+
+    try:
+        with LocalMonitor() as listener:
+            print("ISC FOREGROUND MONITOR (NO SUSPEND)")
+            print(f"Private Unix socket: {listener.path}", flush=True)
+            if self_test:
+                raw = json.dumps({
+                    "session_id": "synthetic-monitor-session",
+                    "hook_event_name": "Stop",
+                }).encode()
+                from .hook_payload import parse_hook_payload
+                observation = parse_hook_payload("codex", raw)
+                if observation is None or not send_observation(
+                    listener.path, observation
+                ):
+                    print("Synthetic test event could not be queued.")
+                    return 2
+            listener.run_for(seconds)
+            print(f"Accepted metadata events: {listener.accepted}")
+            print(f"Rejected metadata events: {listener.rejected}")
+            print(f"Conservative active events: {listener.counts['active']}")
+            print(f"Conservative unknown events: {listener.counts['unknown']}")
+            print("Full workload coverage: NOT VERIFIED")
+            print("ISC automatic suspend: NOT IMPLEMENTED")
+            print("No services, hooks, or power settings were modified.")
+        print("Private Unix socket cleaned up.")
+        return 0
+    except (OSError, PermissionError, ValueError) as error:
+        print(f"Monitor unavailable: {type(error).__name__}")
+        print("ISC automatic suspend: NOT IMPLEMENTED")
+        return 2
+
+
+def send_hook(*, source: str, socket_path: str) -> int:
+    """Optional future hook entry; fail-open and silent by design.
+
+    This is not installed automatically into Claude Code or Codex.
+    """
+    observation = read_hook_payload(source, sys.stdin.buffer)
+    if observation is not None:
+        send_observation(socket_path, observation)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -188,13 +236,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook"),
         default="status",
     )
     parser.add_argument(
         "--source", choices=sorted(SUPPORTED_SOURCES),
         help="Source application for the read-only hook-probe command",
     )
+    parser.add_argument("--seconds", type=float, default=1.0, help="Foreground monitor runtime, max 300 seconds")
+    parser.add_argument("--self-test", action="store_true", help="Send one synthetic Stop event to the private monitor")
+    parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     args = parser.parse_args(argv)
     if args.command == "status":
         return status()
@@ -210,4 +261,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.source is None:
             parser.error("hook-probe requires --source")
         return hook_probe(args.source)
+    if args.command == "monitor":
+        return monitor(seconds=args.seconds, self_test=args.self_test)
+    if args.command == "send-hook":
+        if args.source is None or args.socket_path is None:
+            parser.error("send-hook requires --source and --socket-path")
+        return send_hook(source=args.source, socket_path=args.socket_path)
     return 2

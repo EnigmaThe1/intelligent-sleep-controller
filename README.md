@@ -32,7 +32,7 @@ PYTHONPATH=src python3 -m isc check
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-The commands are read-only. `check` explains why the host **must not be automatically suspended** until job coverage and timer/wake safety are verified. A pure in-memory task-lease registry now exists for future trusted adapters; the read-only `processes` command lists selected candidate process names/PIDs without reading arguments, paths, or environment variables. Process discovery **cannot** determine whether an agent is blocked or running, nor does it establish workload coverage. A pure event interpreter maps lifecycle observations conservatively and only permits WAITING_HUMAN after an adapter explicitly verifies child-work quiescence. **No vendor hooks, daemon, trusted event transport, or live adapter event collection are installed.**
+The commands are read-only. `check` explains why the host **must not be automatically suspended** until job coverage and timer/wake safety are verified. A pure in-memory task-lease registry now exists for future trusted adapters; the read-only `processes` command lists selected candidate process names/PIDs without reading arguments, paths, or environment variables. Process discovery **cannot** determine whether an agent is blocked or running, nor does it establish workload coverage. A pure event interpreter maps lifecycle observations conservatively and only permits WAITING_HUMAN after an adapter explicitly verifies child-work quiescence. **No vendor hooks or persistent daemon are installed.** A foreground, private, same-user Unix-socket monitor can accept minimal metadata for time-bounded experiments. Transport events are **not authoritative proof of workload coverage**.
 
 ### Hook-payload parser (synthetic input only)
 
@@ -44,6 +44,18 @@ printf '%s\n' '{"session_id":"synthetic-local-test","hook_event_name":"Stop","to
 ```
 
 **Do not register this diagnostic command as an agent hook.** It is deliberately not an event receiver, always read-only, and cannot establish authoritative task/child coverage. The future non-blocking hook transport will need to make loss of events visible without affecting agents.
+
+### Local foreground receiver (no hook installation)
+
+On a Linux user session with a private `XDG_RUNTIME_DIR`, the following starts a **temporary foreground listener** and sends one internally generated synthetic `Stop` event:
+
+```bash
+PYTHONPATH=src python3 -m isc monitor --seconds 1 --self-test
+```
+
+The socket is placed inside a new private runtime directory and removed after the monitor exits. A separate `send-hook --source codex --socket-path <path>` command can relay a bounded, sanitised JSON hook message from standard input, **but it is not installed in any agent**. Any transport failure returns success to the calling application, and it never writes to stdout. Receiving an event does not certify its origin beyond the operating-system user or make sleep eligible.
+
+This temporary foreground experiment is **not** the future persistent ON/OFF/MONITOR configuration. Automatic suspension and service installation remain unimplemented.
 
 ## Design and scope
 

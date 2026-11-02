@@ -61,3 +61,9 @@ Vendor names in the example mapping are optional and never imply any runtime dep
 `src/isc/hook_payload.py` reads at most 64 KiB from an explicitly provided binary stream. It admits only the documented common `session_id` and `hook_event_name` fields, hashes the session ID and drops the rest of the payload. The probe CLI outputs no session fingerprint or raw hook input. No content from `tool_input`, `tool_response`, `last_assistant_message`, `transcript_path`, `cwd`, or environment is retained or logged.
 
 Hook input is untrusted. A fingerprint is **not an authentication token**. A future authenticated local receiver must track event loss, source ownership, supervision of active children, and cross-session workload coverage before using any event to decide that sleep is safe. A command hook invocation must never block or modify the original application's execution.
+
+## Foreground local event transport
+
+The optional `LocalMonitor` creates a temporary user-owned directory (0700) under the private `XDG_RUNTIME_DIR` and a Unix stream socket (0600). It checks Linux `SO_PEERCRED` and accepts only same-UID peers. Input is capped at 1024 bytes and includes **only** a source label, event name, and fingerprinted session identifier. The receiver derives states from known events; it does not accept a client-provided `COMPLETED` or `WAITING_HUMAN` state, and expires its in-memory task leases to UNKNOWN.
+
+Same-UID identity is not proof that an agent or process owns an event: other same-UID programs can send spoofed events. The receiver therefore **never** declares workload coverage complete. Stale/undelivered events, incomplete child-process awareness, background jobs, unrepresented sessions, and scheduled-work risks continue to prohibit automatic sleep. No source configuration is changed and no sleep executor exists.
