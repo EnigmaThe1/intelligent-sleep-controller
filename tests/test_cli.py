@@ -156,7 +156,7 @@ class CLITests(unittest.TestCase):
                 "hooks": {
                     "Stop": [{"hooks": [{
                         "type": "command", "command": "PRIVATE_PASSWORD"
-                    }]}
+                    }]}]
                 },
                 "env": {"TOKEN": "DO_NOT_DISPLAY"},
             }), encoding="utf-8")
