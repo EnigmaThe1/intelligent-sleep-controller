@@ -222,5 +222,29 @@ class CLITests(unittest.TestCase):
         self.assertIn("NOT IMPLEMENTED", output.getvalue())
 
 
+    @patch("isc.cli.serve_monitor")
+    def test_controlled_serve_reports_safe_summary(self, serve):
+        from isc.service import MonitorSummary
+        serve.return_value = MonitorSummary(
+            "mode_off", 2, 0, (("claude_code", "SessionStart", 2),),
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["serve", "--seconds", "0"]), 0)
+        serve.assert_called_once_with(max_seconds=0)
+        self.assertIn("Monitor stopped: mode_off", output.getvalue())
+        self.assertIn("claude_code/SessionStart: 2", output.getvalue())
+        self.assertIn("NOT IMPLEMENTED", output.getvalue())
+
+    @patch("isc.cli.serve_monitor")
+    def test_controlled_serve_refusal_is_safe(self, serve):
+        from isc.service import MonitorUnavailable
+        serve.side_effect = MonitorUnavailable("monitor_mode_not_selected")
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["serve"]), 2)
+        self.assertIn("monitor_mode_not_selected", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

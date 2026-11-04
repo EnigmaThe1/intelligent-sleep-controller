@@ -17,6 +17,7 @@ from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
 from .receiver import LocalMonitor, send_observation, send_discovered_observation
 from .settings import ModeConfigError, read_mode, set_mode
+from .service import MonitorUnavailable, serve_monitor
 
 
 def _probe(argv: list[str]) -> str:
@@ -313,6 +314,27 @@ def mode_control(selected: str | None) -> int:
     return 0
 
 
+def controlled_monitor(*, seconds: float) -> int:
+    """Operator-managed, foreground only; never enabled automatically."""
+    try:
+        summary = serve_monitor(max_seconds=seconds)
+    except (MonitorUnavailable, ValueError) as exc:
+        print(f"ISC monitoring refused or stopped: {str(exc)}")
+        print("ISC automatic suspend: NOT IMPLEMENTED")
+        return 2
+    print(f"Monitor stopped: {summary.reason}")
+    print(f"Accepted metadata events: {summary.accepted}")
+    print(f"Rejected metadata events: {summary.rejected}")
+    print("Accepted event types (no session IDs):")
+    if not summary.event_counts:
+        print("  none")
+    for source, event, count in summary.event_counts:
+        print(f"  {source}/{event}: {count}")
+    print("Full workload coverage: NOT VERIFIED")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -320,14 +342,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve"),
         default="status",
     )
     parser.add_argument(
         "--source", choices=sorted(SUPPORTED_SOURCES),
         help="Source application for the read-only hook-probe command",
     )
-    parser.add_argument("--seconds", type=float, default=1.0, help="Foreground monitor runtime, max 300 seconds")
+    parser.add_argument("--seconds", type=float, default=1.0, help="Foreground monitor seconds; serve accepts 0 for indefinite")
     parser.add_argument("--self-test", action="store_true", help="Send one synthetic Stop event to the private monitor")
     parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
@@ -336,6 +358,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "mode":
         return mode_control(args.set)
+    if args.command == "serve":
+        return controlled_monitor(seconds=args.seconds)
     if args.set is not None:
         parser.error("--set is only valid for the mode command")
     if args.command == "status":

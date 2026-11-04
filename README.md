@@ -90,6 +90,18 @@ PYTHONPATH=src python3 -m isc mode --set off
 
 `mode --set on` explicitly refuses until automatic suspend is implemented, safety checks pass, and operator approval is possible. The preference alone does **not** start or stop a monitor, alter GNOME/logind settings, or install a background service. `monitor` remains an explicit, temporary foreground diagnostic independent of the saved preference. A future service will enforce the preference, including changes while running.
 
+### Controlled foreground MONITOR service (opt-in, not installed)
+
+ISC can now keep an explicitly launched **foreground** receiver running under the saved MONITOR preference. Its socket is private and discoverable by previously installed optional hooks. Switching the preference to OFF stops the receiver after a short poll interval; corrupted settings also cause shutdown without any suspend operation.
+
+```bash
+PYTHONPATH=src python3 -m isc mode --set monitor
+PYTHONPATH=src python3 -m isc serve --seconds 30
+PYTHONPATH=src python3 -m isc mode --set off
+```
+
+`serve --seconds 0` keeps the foreground monitor running until OFF or Ctrl+C. Only invoke it in a terminal you intend to dedicate to monitoring. It is **not automatically started** at login and is **not yet installed as a systemd user service**. Startup supervision, crash recovery, adapter completeness, and true safe-suspend decisions are future work. Mode ON remains prohibited.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)

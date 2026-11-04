@@ -87,3 +87,7 @@ ISC hook handlers use asynchronous command hooks except for `SessionEnd`, which 
 ## Persistent preference foundation (not a service)
 
 `src/isc/settings.py` stores an explicit, minimal versioned JSON operator preference in a user-owned private configuration directory, using atomic writes and an advisory lock. The only supported values are `off` and `monitor`: missing settings default to `off`; corrupt, unsafe, or unexpected settings are rejected. `on` cannot be persisted until suspend safety requirements have been met. These values are presently **configuration preferences**, not an active background daemon control. `monitor` must still be invoked manually and terminates when its foreground duration ends. No GNOME settings are changed by this foundation.
+
+## Controlled foreground MONITOR supervisor
+
+`isc serve --seconds 0` starts a discoverable `LocalMonitor` **only** if the saved preference is MONITOR. The supervisor polls the persisted preference at bounded intervals, accepts only privacy-minimal event metadata and exits when OFF is selected or the configuration becomes invalid. A bounded `--seconds` run is available for testing. The service cannot suspend the computer, execute coding agents, or modify GNOME/logind settings. No systemd unit is installed or enabled, and startup on boot is not yet implemented. Abrupt termination may leave a stale private socket directory, which is never silently deleted.

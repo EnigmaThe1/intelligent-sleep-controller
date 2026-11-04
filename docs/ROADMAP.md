@@ -19,7 +19,8 @@
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [ ] Scheduled service discovery and conservative timer safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
-- [ ] Continuous MONITOR with audit log and event collection
+- [x] Explicit foreground MONITOR supervisor with persistent OFF shutdown and safe invalid-config failure
+- [ ] Optional systemd user service, startup supervision, failure recovery and local minimal audit log
 - [ ] Tests using synthetic system states; zero suspend actions
 
 ## Phase 2 — controlled power management
