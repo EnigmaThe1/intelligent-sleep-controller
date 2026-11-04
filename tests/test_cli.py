@@ -201,5 +201,26 @@ class CLITests(unittest.TestCase):
         self.assertIn("8 event group(s)", output.getvalue())
 
 
+    @patch("isc.cli.read_mode")
+    def test_mode_get_is_read_only(self, read):
+        from isc.settings import ModeStatus
+        read.return_value = ModeStatus("off", False)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["mode"]), 0)
+        self.assertIn("OFF", output.getvalue())
+        self.assertIn("no file written", output.getvalue())
+
+    @patch("isc.cli.set_mode")
+    def test_mode_set_does_not_activate_sleep(self, setter):
+        from isc.settings import ModeStatus
+        setter.return_value = ModeStatus("monitor", True)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["mode", "--set", "monitor"]), 0)
+        setter.assert_called_once_with("monitor")
+        self.assertIn("NOT IMPLEMENTED", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

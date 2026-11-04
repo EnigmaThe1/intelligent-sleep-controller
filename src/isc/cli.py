@@ -16,6 +16,7 @@ from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
 from .receiver import LocalMonitor, send_observation, send_discovered_observation
+from .settings import ModeConfigError, read_mode, set_mode
 
 
 def _probe(argv: list[str]) -> str:
@@ -39,10 +40,16 @@ def _idle_text() -> str:
 
 def status() -> int:
     print(f"Intelligent Sleep Controller {__version__}")
-    print("Implementation: foundation (read-only)")
+    print("Implementation: foundation (no automatic suspend)")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     print("ISC service installation: NOT IMPLEMENTED")
-    print("ISC operator controls ON/OFF/MONITOR: PLANNED")
+    try:
+        current = read_mode()
+        print(f"ISC operator preference: {current.mode.upper()}" +
+              (" (stored)" if current.configured else " (safe default)"))
+    except ModeConfigError:
+        print("ISC operator preference: OFF (configuration invalid; fail-safe)")
+    print("ISC ON control and background service: NOT IMPLEMENTED")
     try:
         with open("/sys/power/mem_sleep", encoding="utf-8") as stream:
             power_modes = stream.read().strip()
@@ -287,6 +294,25 @@ def hook_change(*, source: str, operation: str, confirm: bool) -> int:
     return 0
 
 
+def mode_control(selected: str | None) -> int:
+    """Persist only an operator preference; not a service or power setting."""
+    try:
+        state = read_mode() if selected is None else set_mode(selected)
+    except ModeConfigError as error:
+        if str(error) == "on_not_implemented":
+            print("ISC ON unavailable: automatic suspend is not implemented.")
+        else:
+            print("ISC mode unavailable: unsafe or invalid local configuration.")
+        print("ISC automatic suspend: NOT IMPLEMENTED")
+        return 2
+    print(f"ISC persistent preference: {state.mode.upper()}")
+    print("Stored on disk." if state.configured else "Safe default; no file written.")
+    print("No background service was started or stopped.")
+    print("No system power settings were changed.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -294,7 +320,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode"),
         default="status",
     )
     parser.add_argument(
@@ -306,7 +332,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize one selected hook change")
+    parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "mode":
+        return mode_control(args.set)
+    if args.set is not None:
+        parser.error("--set is only valid for the mode command")
     if args.command == "status":
         return status()
     if args.command == "idle":

@@ -6,7 +6,7 @@ ISC aims to let a Linux computer sleep when autonomous work is **safely idle**, 
 
 ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude, Codex, Ollama, or any AI service. Application-specific integrations will be optional.
 
-> **Development status — foundation only.** This branch implements a pure, conservative decision policy, a read-only status command, and tests. It **does not install a daemon, change power settings, hold inhibitors, or suspend a computer**. ON/OFF/MONITOR controls and automated suspend are *planned*, not available yet.
+> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, hold inhibitors, or suspend a computer**. ON, automatic suspend, and continuous background monitoring are **not implemented**.
 
 ## Principles
 
@@ -77,6 +77,18 @@ PYTHONPATH=src python3 -m isc hook-disable --source codex --confirm
 ```
 
 Do **not** run these until you've reviewed the tested plan and confirmed that ISC's monitor-only hooks should be enabled. Each modification produces a private (0600) recovery backup in the agent's configuration directory. It leaves existing hook groups in place and appends ISC groups, or removes only exact ISC-created groups. The target is rewritten atomically with a best-effort last-moment race check. External editors that ignore ISC's advisory lock could still race; refrain from modifying the same file concurrently. It never executes either coding agent or enables sleep. Codex may require separate hook trust review. For the safest uninstall, use the targeted `hook-disable`, not a whole-file backup restoration that could discard later settings.
+
+### Persistent operator preference (no service, no suspend)
+
+The preference is kept in a local, user-owned JSON file beneath `$XDG_CONFIG_HOME/intelligent-sleep-controller/settings.json` (or `~/.config/intelligent-sleep-controller/settings.json`). It survives reboots, and starts at the conservative **OFF** default if there is no configuration. A missing or invalid configuration never enables automatic suspend.
+
+```bash
+PYTHONPATH=src python3 -m isc mode
+PYTHONPATH=src python3 -m isc mode --set monitor
+PYTHONPATH=src python3 -m isc mode --set off
+```
+
+`mode --set on` explicitly refuses until automatic suspend is implemented, safety checks pass, and operator approval is possible. The preference alone does **not** start or stop a monitor, alter GNOME/logind settings, or install a background service. `monitor` remains an explicit, temporary foreground diagnostic independent of the saved preference. A future service will enforce the preference, including changes while running.
 
 ## Design and scope
 

@@ -24,7 +24,8 @@
 
 ## Phase 2 — controlled power management
 
-- [ ] Persistent ON / OFF / MONITOR modes
+- [x] Persistent OFF/MONITOR user preference (no daemon or power effects)
+- [ ] Safe ON operator control and enforced mode transitions in a persistent service
 - [ ] Time-limited Keep Awake
 - [ ] Safe inhibitor lifecycle and privileged suspend executor
 - [ ] Reversible GNOME settings ownership, recovery and uninstall
