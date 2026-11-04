@@ -61,16 +61,19 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5) -> Monit
             print(f"Private Unix socket: {receiver.path}", flush=True)
             print("OFF preference stops monitoring. Ctrl+C stops foreground monitoring.", flush=True)
             reason = "time_limit"
-            while True:
-                if _read_preference() != "monitor":
-                    reason = "mode_off"
-                    break
-                now = time.monotonic()
-                remaining = None if deadline is None else deadline - now
-                if remaining is not None and remaining <= 0:
-                    break
-                interval = min(poll_seconds, remaining) if remaining is not None else poll_seconds
-                receiver.run_for(interval)
+            try:
+                while True:
+                    if _read_preference() != "monitor":
+                        reason = "mode_off"
+                        break
+                    now = time.monotonic()
+                    remaining = None if deadline is None else deadline - now
+                    if remaining is not None and remaining <= 0:
+                        break
+                    interval = min(poll_seconds, remaining) if remaining is not None else poll_seconds
+                    receiver.run_for(interval)
+            except KeyboardInterrupt:
+                reason = "interrupted"
             return MonitorSummary(
                 reason,
                 accepted=receiver.accepted,
@@ -81,9 +84,6 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5) -> Monit
                     in sorted(receiver.event_counts.items())
                 ),
             )
-    except KeyboardInterrupt:
-        # LocalMonitor context manager still removes its own socket normally.
-        return MonitorSummary("interrupted")
     except (OSError, PermissionError, ValueError) as exc:
         # No socket ownership, arguments or config paths in the error.
         raise MonitorUnavailable("receiver_unavailable") from None

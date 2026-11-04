@@ -143,6 +143,28 @@ class ServiceTests(unittest.TestCase):
                 serve_monitor(max_seconds=0.05)
         self.assertFalse((self.runtime / "isc-monitor").exists())
 
+    def test_interrupt_keeps_counters_and_cleans_socket(self):
+        set_mode("monitor", config_root=self.root)
+        from isc.receiver import LocalMonitor
+        original_run_for = LocalMonitor.run_for
+
+        def interrupted(receiver, seconds):
+            receiver.accepted = 3
+            receiver.rejected = 1
+            receiver.event_counts[("claude_code", "SessionStart")] = 3
+            raise KeyboardInterrupt()
+
+        with patch.object(LocalMonitor, "run_for", interrupted):
+            with contextlib.redirect_stdout(StringIO()):
+                summary = serve_monitor(max_seconds=3)
+        self.assertEqual(summary.reason, "interrupted")
+        self.assertEqual(summary.accepted, 3)
+        self.assertEqual(summary.rejected, 1)
+        self.assertEqual(
+            summary.event_counts, (("claude_code", "SessionStart", 3),),
+        )
+        self.assertFalse((self.runtime / "isc-monitor").exists())
+
     def test_bad_duration_refused_without_changes(self):
         set_mode("monitor", config_root=self.root)
         for seconds in (-1, float("nan"), 86401):
