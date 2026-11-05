@@ -225,6 +225,7 @@ class TrayController:
             self.profiles_menu.remove(item)
         try:
             state = power_profiles()
+            self.profiles_item.set_label("Power Profile: " + state.current)
             labels = {
                 "power-saver": "Energy Saver",
                 "balanced": "Balanced",
@@ -238,6 +239,7 @@ class TrayController:
                 item.connect("activate", self._select_profile, profile)
                 self.profiles_menu.append(item)
         except NativeControlError:
+            self.profiles_item.set_label("Power Profile: unavailable")
             item = self.Gtk.MenuItem.new_with_label(
                 "OS power-profile service unavailable"
             )
@@ -367,9 +369,14 @@ class TrayController:
         self.refresh()
         state = tray_snapshot()
         mode = state.mode.upper() if state.valid else "OFF (invalid config)"
+        try:
+            current_profile = power_profiles().current
+        except NativeControlError:
+            current_profile = "unavailable"
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
+            f"OS Power Profile: {current_profile}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
             f"Keep Awake: {'until cancelled' if self._awake.status().requested and self._awake.status().remaining_seconds is None else 'active' if self._awake.status().requested else 'inactive'}\n"
