@@ -190,5 +190,29 @@ class KeepAwakeTests(unittest.TestCase):
         killpg.assert_not_called()
 
 
+    def test_infinite_command_uses_native_coreutils_sleep(self):
+        args = inhibitor_command(None, "abc123")
+        self.assertEqual(args[-2:], ("/usr/bin/sleep", "infinity"))
+        self.assertIn("--what=idle:sleep", args)
+
+    @patch("isc.keepawake.os.killpg")
+    @patch("isc.keepawake.os.getpgid", return_value=4321)
+    @patch("isc.keepawake._observed_lock", return_value=True)
+    @patch("isc.keepawake.os.access", return_value=True)
+    @patch("isc.keepawake.subprocess.Popen")
+    def test_indefinite_inhibitor_reports_no_expiry_and_can_cancel(
+        self, spawn, executable, observed, getpgid, killpg,
+    ):
+        manager, child = self._working_manager()
+        spawn.return_value = child
+        status = manager.start(None)
+        self.assertTrue(status.requested)
+        self.assertIsNone(status.remaining_seconds)
+        self.assertEqual(spawn.call_args.args[0][-1], "infinity")
+        self.assertIsNone(manager.status().remaining_seconds)
+        manager.cancel()
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+
+
 if __name__ == "__main__":
     unittest.main()
