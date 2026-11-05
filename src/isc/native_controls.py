@@ -25,7 +25,7 @@ def power_profiles():
     selected = _run(["powerprofilesctl", "get"])
     if available.returncode or selected.returncode:
         raise NativeControlError("profile_service_unavailable")
-    names = tuple(name for name in PROFILES if re.search(r"(?m)^\\s*\\*?\\s*" + re.escape(name) + r":\\s*$", available.stdout))
+    names = tuple(name for name in PROFILES if re.search(r"(?m)^\s*\*?\s*" + re.escape(name) + r":\s*$", available.stdout))
     current = selected.stdout.strip()
     if not names or current not in names:
         raise NativeControlError("profile_state_unknown")
@@ -55,7 +55,7 @@ def display_support():
         result = _run(["xset", "q"])
     except NativeControlError:
         return False, "xset_unavailable"
-    if result.returncode or not re.search(r"(?m)^\\s*DPMS is Enabled\\s*$", result.stdout):
+    if result.returncode or not re.search(r"(?m)^\s*DPMS is Enabled\s*$", result.stdout):
         return False, "dpms_not_available"
     return True, "x11_dpms_available"
 
