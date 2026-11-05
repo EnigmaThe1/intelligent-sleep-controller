@@ -1,4 +1,4 @@
-"""Read-only ISC CLI. Never invokes systemctl suspend or changes settings."""
+"""ISC CLI. Only an explicit, interactive manual command can request suspend."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from .processes import read_process_candidates
 from .receiver import LocalMonitor, send_observation, send_discovered_observation
 from .settings import ModeConfigError, read_mode, set_mode
 from .service import MonitorUnavailable, serve_monitor
+from .manual_power import assess_manual_suspend, request_manual_suspend
 
 
 def _probe(argv: list[str]) -> str:
@@ -335,6 +336,41 @@ def controlled_monitor(*, seconds: float) -> int:
     return 0
 
 
+def manual_power(*, confirm: bool, action: str | None) -> int:
+    """Preview by default; only explicit interactive suspend can change power."""
+    if action is None:
+        print("ISC MANUAL POWER")
+        print("Sleep / Suspend: available as the same suspend-to-RAM action")
+        print("Hibernate: future separate action (not enabled)")
+        print("Manual suspend works even when ISC automatic mode is OFF.")
+        print("Use 'isc suspend' for a read-only assessment.")
+        print("ISC automatic suspend: NOT IMPLEMENTED")
+        return 0
+    assessment = assess_manual_suspend()
+    print("ISC MANUAL SUSPEND / SLEEP")
+    print(f"System capability: {assessment.capability}")
+    print(f"Known candidate processes (activity UNKNOWN): {assessment.candidate_processes}")
+    print("Full workload coverage: NOT VERIFIED")
+    if assessment.blockers:
+        print("Request blocked:")
+        for code in assessment.blockers:
+            print(f"  - {code}")
+        print("No suspend request made.")
+        return 2
+    print("OS preflight: no verified blockers; this is NOT a work-safety guarantee.")
+    if not confirm:
+        print("PREVIEW ONLY. No suspend request made.")
+        print("To suspend manually, explicitly use --confirm in a local terminal.")
+        return 0
+    outcome = request_manual_suspend(confirmed=True)
+    if not outcome.submitted:
+        print(f"No suspend request made: {outcome.reason}")
+        return 2
+    print("Manual suspend request submitted to systemd (resume not verified).")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -342,7 +378,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend"),
         default="status",
     )
     parser.add_argument(
@@ -356,6 +392,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize one selected hook change")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command in ("power", "sleep", "suspend"):
+        return manual_power(
+            confirm=args.confirm,
+            action=None if args.command == "power" else "suspend",
+        )
     if args.command == "mode":
         return mode_control(args.set)
     if args.command == "serve":

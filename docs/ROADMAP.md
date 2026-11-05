@@ -27,6 +27,8 @@
 
 - [x] Persistent OFF/MONITOR user preference (no daemon or power effects)
 - [ ] Safe ON operator control and enforced mode transitions in a persistent service
+- [x] Explicit manual Sleep/Suspend preview, capability/inhibitor checks and typed confirmation (no CI suspend)
+- [ ] Manual Hibernate and hybrid options after hardware validation
 - [ ] Time-limited Keep Awake
 - [ ] Safe inhibitor lifecycle and privileged suspend executor
 - [ ] Reversible GNOME settings ownership, recovery and uninstall

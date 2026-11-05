@@ -246,5 +246,50 @@ class CLITests(unittest.TestCase):
         self.assertIn("monitor_mode_not_selected", output.getvalue())
 
 
+    @patch("isc.cli.assess_manual_suspend")
+    @patch("isc.cli.request_manual_suspend")
+    def test_manual_suspend_preview_does_not_request_power(self, request, assess):
+        from isc.manual_power import SuspendAssessment
+        assess.return_value = SuspendAssessment(True, "yes", (), 2)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["suspend"]), 0)
+        request.assert_not_called()
+        self.assertIn("PREVIEW ONLY", output.getvalue())
+        self.assertIn("NOT VERIFIED", output.getvalue())
+
+    @patch("isc.cli.assess_manual_suspend")
+    @patch("isc.cli.request_manual_suspend")
+    def test_manual_sleep_alias_is_suspend_not_systemctl_sleep(self, request, assess):
+        from isc.manual_power import SuspendAssessment
+        assess.return_value = SuspendAssessment(True, "yes", (), 1)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["sleep"]), 0)
+        request.assert_not_called()
+        self.assertIn("SUSPEND / SLEEP", output.getvalue())
+
+    @patch("isc.cli.request_manual_suspend")
+    def test_power_menu_never_suspends(self, request):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["power"]), 0)
+        self.assertIn("Hibernate: future", output.getvalue())
+        request.assert_not_called()
+
+    @patch("isc.cli.assess_manual_suspend")
+    @patch("isc.cli.request_manual_suspend")
+    def test_manual_suspend_never_bypasses_preflight_blockers(self, request, assess):
+        from isc.manual_power import SuspendAssessment
+        assess.return_value = SuspendAssessment(
+            False, "yes", ("blocking_sleep_inhibitor_present",), 0,
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["suspend", "--confirm"]), 2)
+        request.assert_not_called()
+        self.assertIn("No suspend request made.", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

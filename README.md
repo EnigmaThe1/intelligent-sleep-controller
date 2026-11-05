@@ -102,6 +102,20 @@ PYTHONPATH=src python3 -m isc mode --set off
 
 `serve --seconds 0` keeps the foreground monitor running until OFF or Ctrl+C. Only invoke it in a terminal you intend to dedicate to monitoring. It is **not automatically started** at login and is **not yet installed as a systemd user service**. Startup supervision, crash recovery, adapter completeness, and true safe-suspend decisions are future work. Mode ON remains prohibited.
 
+### Manual Sleep / Suspend (explicit user action only)
+
+Linux `Sleep` and `Suspend` commonly refer to **suspend to RAM**, so ISC uses the *same explicit action* for both. Do not confuse these aliases with `systemctl sleep`, which may choose a different sleep mechanism depending on logind policy. Hibernate-to-disk is a separate future action.
+
+```bash
+PYTHONPATH=src python3 -m isc power
+PYTHONPATH=src python3 -m isc suspend
+PYTHONPATH=src python3 -m isc sleep
+```
+
+These commands only display options and perform a read-only preflight. **No sleep is requested without `--confirm` AND typing `SUSPEND` in a local interactive terminal.** For an eventual deliberate suspend, the operator invokes `PYTHONPATH=src python3 -m isc suspend --confirm`, then enters the required confirmation. This may immediately interrupt active work, so save documents and check running tasks first. ISC checks logind capability, inhibitor locks and an illustrative local process inventory both before and after the confirmation. Unknown capability, inhibitors, or inventory refuse the operation; the OS is also required to check inhibitors when queuing suspend. It never uses `--force`, disables inhibitors, or alters GNOME's power settings.
+
+**Manual operation is distinct from automatic ISC modes.** A deliberate manual suspend remains possible in OFF or MONITOR; selecting OFF only disables ISC-initiated **automatic** suspend. ON is still not implemented, and ISC still cannot assert coverage of all background work. The hardware can have resume problems even when the OS accepts a suspend request. Code and CI tests use mocks and never sleep a test machine.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)
