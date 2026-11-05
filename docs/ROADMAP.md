@@ -37,13 +37,23 @@
 - [x] Persistent OFF/MONITOR user preference (no daemon or power effects)
 - [ ] Safe ON operator control and enforced mode transitions in a persistent service
 - [x] Explicit manual Sleep/Suspend preview, capability/inhibitor checks and typed confirmation (no CI suspend)
-- [ ] Manual Hibernate and hybrid options after hardware validation
+- [x] Native capability-gated manual Hibernate and Hybrid Sleep preview/explicit request (hardware resume tests pending)
+- [ ] Hardware suspend, hibernate and hybrid resume verification on non-critical test systems
 - [x] Explicit timed Keep Awake via verified systemd inhibitor (tray presets + CLI foreground; cancel/expiry)
-- [ ] Shared Keep Awake control across independent tray and CLI processes
+- [x] Explicit indefinite Keep Awake until Cancelled while tray/CLI is running
+- [ ] Shared/persistent Keep Awake ownership across independent tray and CLI processes
 - [ ] Safe inhibitor lifecycle and privileged suspend executor
 - [ ] Reversible GNOME settings ownership, recovery and uninstall
 - [ ] Race-safe pre-suspend check; opt-in only
 - [ ] Suspend/resume integration tests on non-critical hardware
+
+## Phase 2A — Native power hub controls
+
+- [x] Query and select only the host-supported system power profiles using powerprofilesctl.
+- [x] Open GNOME's existing Power settings panel (no alternative settings editor).
+- [x] Display-only sleep for Xorg via xset DPMS without suspending processing.
+- [ ] Display-only sleep backend for non-X11 desktops (Wayland support only if compositor exposes a safe API).
+- [ ] Verify native power-profile and DPMS behaviour on representative desktop systems.
 
 ## Phase 3 — optional adapters
 
