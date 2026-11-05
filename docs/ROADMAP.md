@@ -29,7 +29,8 @@
 - [ ] Safe ON operator control and enforced mode transitions in a persistent service
 - [x] Explicit manual Sleep/Suspend preview, capability/inhibitor checks and typed confirmation (no CI suspend)
 - [ ] Manual Hibernate and hybrid options after hardware validation
-- [ ] Time-limited Keep Awake
+- [x] Explicit timed Keep Awake via verified systemd inhibitor (tray presets + CLI foreground; cancel/expiry)
+- [ ] Shared Keep Awake control across independent tray and CLI processes
 - [ ] Safe inhibitor lifecycle and privileged suspend executor
 - [ ] Reversible GNOME settings ownership, recovery and uninstall
 - [ ] Race-safe pre-suspend check; opt-in only

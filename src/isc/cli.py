@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 import subprocess
+import time
 from typing import Sequence
 
 from . import __version__
@@ -21,6 +22,7 @@ from .service import MonitorUnavailable, serve_monitor
 from .manual_power import assess_manual_suspend, request_manual_suspend
 from .tray import run_tray, backend_probe
 from .autostart import AutostartError, inspect_autostart, modify_autostart
+from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
 
 
 def _probe(argv: list[str]) -> str:
@@ -397,6 +399,41 @@ def tray_autostart(*, operation: str | None, confirm: bool) -> int:
     return 0
 
 
+def keep_awake_cli(minutes: int | None) -> int:
+    """Foreground timed inhibitor: Ctrl+C releases, no background daemon."""
+    if minutes is None:
+        print("ISC KEEP AWAKE")
+        print("Available durations (minutes): " + ", ".join(map(str, PRESETS_MINUTES)))
+        print("Use: isc keep-awake --minutes 15")
+        print("The terminal stays occupied; Ctrl+C cancels the inhibitor.")
+        print("No Keep Awake operation started.")
+        return 0
+    guard = KeepAwakeManager()
+    try:
+        state = guard.start(minutes)
+        if not state.requested:
+            print("Keep Awake refused: systemd inhibitor not verified.")
+            return 2
+        print(f"Keep Awake verified for up to {minutes} minutes.")
+        print("Automatic idle sleep and suspend are temporarily inhibited.")
+        print("This terminal must remain open. Press Ctrl+C to cancel.")
+        try:
+            while guard.status().requested:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print("Keep Awake cancelled by operator.")
+        print("Keep Awake period ended or was cancelled.")
+        return 0
+    except KeepAwakeError as exc:
+        print("Keep Awake unavailable: " + str(exc))
+        return 2
+    finally:
+        try:
+            guard.close()
+        except KeepAwakeError:
+            print("WARNING: could not verify inhibitor cancellation.")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -404,7 +441,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake"),
         default="status",
     )
     parser.add_argument(
@@ -417,8 +454,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize a selected change or manual suspend")
     parser.add_argument("--startup", choices=("enable", "disable"), help="User login tray startup control; requires autostart command")
+    parser.add_argument("--minutes", type=int, choices=PRESETS_MINUTES, help="Keep Awake duration in minutes")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "keep-awake":
+        return keep_awake_cli(args.minutes)
+    if args.minutes is not None:
+        parser.error("--minutes is only valid for keep-awake")
     if args.command == "autostart":
         if args.set is not None:
             parser.error("--set is only valid for mode")

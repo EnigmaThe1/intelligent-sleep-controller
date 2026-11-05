@@ -348,5 +348,37 @@ class CLITests(unittest.TestCase):
         changer.assert_called_once_with("disable")
 
 
+    @patch("isc.cli.KeepAwakeManager")
+    def test_keep_awake_without_minutes_does_not_start(self, manager):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["keep-awake"]), 0)
+        manager.assert_not_called()
+        self.assertIn("No Keep Awake operation started.", output.getvalue())
+
+    @patch("isc.cli.KeepAwakeManager")
+    def test_keep_awake_explicit_minutes_and_foreground_release(self, manager):
+        from isc.keepawake import KeepAwakeStatus
+        lease = manager.return_value
+        lease.start.return_value = KeepAwakeStatus(True, 900)
+        lease.status.return_value = KeepAwakeStatus(False)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["keep-awake", "--minutes", "15"]), 0)
+        lease.start.assert_called_once_with(15)
+        lease.close.assert_called_once_with()
+        self.assertIn("Keep Awake verified", output.getvalue())
+
+    @patch("isc.cli.KeepAwakeManager")
+    def test_keep_awake_refused_does_not_leave_lease(self, manager):
+        from isc.keepawake import KeepAwakeError
+        manager.return_value.start.side_effect = KeepAwakeError("not_verified")
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["keep-awake", "--minutes", "30"]), 2)
+        manager.return_value.close.assert_called_once_with()
+        self.assertIn("not_verified", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

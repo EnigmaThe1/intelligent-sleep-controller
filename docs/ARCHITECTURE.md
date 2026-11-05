@@ -132,3 +132,21 @@ persistent to prevent unlink/inode races; the kernel releases the lock when
 the process exits. Launching a second instance while the lock is held
 exits without starting another tray or MONITOR child. Existing legacy tray
 instances must be closed before using the upgraded single-instance version.
+
+## Explicit timed Keep Awake
+
+The optional `src/isc/keepawake.py` starts a bounded, user-requested
+`systemd-inhibit --what=idle:sleep --mode=block` subprocess wrapping
+`/usr/bin/sleep`. The lock is verified by observing a unique, minimal
+`who/why` marker in logind's inhibitor inventory before success is
+reported. Durations are restricted to fixed presets (15–240 minutes).
+No shell, privileged helper, unattended service, or saved power-setting
+change is used. The child receives only a minimal environment; credentials
+and unrelated app tokens are not forwarded. The tray owns and cancels its
+own lock, including on Quit; the CLI holds its independent lock for the
+life of its foreground invocation and releases it on Ctrl+C. Cancel sends
+signals only to the verified new-session child process group, never arbitrary
+other processes. A failed identity check does not attempt to kill a guessed
+process. Inhibitors naturally expire when their wrapped sleep command ends.
+No inhibitor is acquired by MONITOR mode selection, login autostart or
+normal background observation.

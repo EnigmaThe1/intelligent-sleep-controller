@@ -6,7 +6,7 @@ ISC aims to let a Linux computer sleep when autonomous work is **safely idle**, 
 
 ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude, Codex, Ollama, or any AI service. Application-specific integrations will be optional.
 
-> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, hold inhibitors, or suspend a computer**. ON, automatic suspend, and login-started background monitoring are **not implemented**. An optional running tray can now supervise a local monitor-only process.
+> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, or automatically suspend a computer**. Optional manual Sleep and timed Keep Awake are explicit operator actions, never autonomous. ON, automatic suspend, and login-started background monitoring are **not implemented**. An optional running tray can now supervise a local monitor-only process.
 
 ## Principles
 
@@ -162,6 +162,41 @@ not turn on automatic power management.
 
 The tray also uses a private session lock to avoid duplicate tray icons and
 competing monitoring children. Other applications are never terminated.
+
+### Timed Keep Awake (explicit, cancellable, no daemon)
+
+The ISC tray now offers **Keep Awake** presets of **15, 30, 60, 120 or
+240 minutes**, plus **Cancel Keep Awake**. These are explicit user actions,
+independent of the saved OFF/MONITOR preference. The tray reports the remaining
+duration. The inhibitor is released on expiry, cancellation or when the tray
+exits; it is never silently restored at login.
+
+The CLI offers the same timed operation in the **foreground**:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc keep-awake
+PYTHONPATH=src /usr/bin/python3 -m isc keep-awake --minutes 15
+```
+
+The first command explains the available durations; the second requests
+and holds a verified `systemd-inhibit --what=idle:sleep --mode=block`
+inhibitor until the selected duration elapses. **Keep the terminal open**;
+Ctrl+C cancels the CLI lease immediately. The tray provides its own Cancel
+menu item. These are separate user-owned foreground inhibitors; the CLI
+cannot cancel a lease created in the tray or another terminal.
+
+Keep Awake prevents systemd's idle/sleep operations while active, which
+also means **manual Sleep/Suspend can be blocked** until it is cancelled.
+It does **not** inhibit shutdown, does not prevent privileged overrides
+or every possible low-level sleep path, and does not promise the display
+will stay illuminated. ISC checks that its uniquely marked lock appears
+in systemd before reporting success, instead of trusting a process PID.
+If support or verification is unavailable, the command refuses rather
+than claiming protection. No root access, persistent services, GNOME settings
+changes, or background agent activity are required.
+
+Keep Awake is not the future intelligent suspend decision engine; ISC's
+automatic ON mode remains unavailable.
 
 ## Design and scope
 

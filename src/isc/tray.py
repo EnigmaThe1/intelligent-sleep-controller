@@ -13,6 +13,7 @@ from .receiver import discover_monitor_socket
 from .settings import ModeConfigError, read_mode, set_mode
 from .tray_runtime import TrayMonitorProcess
 from .tray_singleton import TrayAlreadyRunning, TrayLockUnavailable, single_tray_instance
+from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class TrayController:
         self.Gtk = Gtk
         self._refreshing = True
         self._monitor_process = TrayMonitorProcess()
+        self._awake = KeepAwakeManager()
         self._monitor_state = "off"
         self.indicator = Indicator.Indicator.new(
             "intelligent-sleep-controller",
@@ -103,7 +105,19 @@ class TrayController:
         self._disabled("Hibernate — planned")
         self._disabled("Hybrid Sleep — planned")
         self._separator()
-        self._disabled("Keep Awake — planned")
+        self.awake_menu_item = Gtk.MenuItem.new_with_label("Keep Awake")
+        self.awake_submenu = Gtk.Menu()
+        for minutes in PRESETS_MINUTES:
+            item = Gtk.MenuItem.new_with_label(f"Keep Awake for {minutes} minutes")
+            item.connect("activate", self._awake_start, minutes)
+            self.awake_submenu.append(item)
+        self.awake_submenu.append(Gtk.SeparatorMenuItem())
+        cancel_item = Gtk.MenuItem.new_with_label("Cancel Keep Awake")
+        cancel_item.connect("activate", self._awake_cancel)
+        self.awake_submenu.append(cancel_item)
+        self.awake_menu_item.set_submenu(self.awake_submenu)
+        self.menu.append(self.awake_menu_item)
+        self.awake_label = self._label("Keep Awake: inactive")
         self._item("Status…", self._status)
         self._separator()
         self._item("Quit ISC tray", self._quit)
@@ -178,9 +192,42 @@ class TrayController:
             self.receiver_label.set_label(
                 state_labels.get(self._monitor_state, "Monitoring: unknown")
             )
+            awake = self._awake.status()
+            self.awake_label.set_label(
+                f"Keep Awake: active ({(awake.remaining_seconds + 59) // 60} min remaining)"
+                if awake.requested else "Keep Awake: inactive"
+            )
         finally:
             self._refreshing = False
         return True
+
+    def _awake_start(self, _item, minutes):
+        try:
+            outcome = self._awake.start(minutes)
+            if not outcome.requested:
+                self._notice(
+                    "Keep Awake unavailable",
+                    "No verified systemd inhibitor was acquired.",
+                    error=True,
+                )
+        except KeepAwakeError as exc:
+            self._notice(
+                "Keep Awake unavailable",
+                "The systemd inhibitor could not be verified: " + str(exc),
+                error=True,
+            )
+        self.refresh()
+
+    def _awake_cancel(self, _item):
+        try:
+            self._awake.cancel()
+        except KeepAwakeError:
+            self._notice(
+                "Keep Awake cancellation unverified",
+                "Use the systemd inhibitor status to verify that the lock was released.",
+                error=True,
+            )
+        self.refresh()
 
     def _status(self, _item):
         self.refresh()
@@ -191,19 +238,31 @@ class TrayController:
             f"Mode preference: {mode}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
+            f"Keep Awake: {'active' if self._awake.status().requested else 'inactive'}\n"
             "Only privacy-limited lifecycle metadata is collected.\n"
             "Full workload coverage is not verified.\n"
             "Automatic suspension is not implemented.",
         )
 
     def _quit(self, _item):
-        self._monitor_process.close()
+        self.close()
         self.Gtk.main_quit()
 
     def close(self):
+        try:
+            self._awake.close()
+        except KeepAwakeError:
+            print("ISC Keep Awake release could not be verified.")
         self._monitor_process.close()
 
     def _suspend(self, _item):
+        if self._awake.status().requested:
+            self._notice(
+                "Keep Awake is active",
+                "Cancel Keep Awake before requesting manual suspend.",
+                error=True,
+            )
+            return
         assessment = assess_manual_suspend()
         if not assessment.request_possible:
             self._notice(
