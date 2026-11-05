@@ -6,7 +6,7 @@ ISC aims to let a Linux computer sleep when autonomous work is **safely idle**, 
 
 ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude, Codex, Ollama, or any AI service. Application-specific integrations will be optional.
 
-> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, or automatically suspend a computer**. Optional manual Sleep and timed Keep Awake are explicit operator actions, never autonomous. ON, automatic suspend, and login-started background monitoring are **not implemented**. An optional running tray can now supervise a local monitor-only process.
+> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, or automatically suspend a computer**. Manual Sleep/Hibernate, user-selected power profiles, display-only DPMS and timed or indefinite Keep Awake are explicit operator actions, never autonomous. ON and intelligent automatic suspend remain **not implemented**; optional login autostart for the MONITOR tray is available. An optional running tray can now supervise a local monitor-only process.
 
 ## Principles
 
@@ -17,7 +17,7 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Explicit operator control.** Future modes: ON (safety-gated auto-suspend), OFF (no ISC-initiated auto-suspend), MONITOR (decisions without suspend), and temporary Keep Awake. Persistent settings and an easy desktop toggle are required.
 - **Least privilege, offline operation.** No API keys, accounts, telemetry, or internet connection required for normal operation.
 - **OS-native first; one power hub.** Reuse supported systemd-logind, kernel and GNOME facilities for existing power operations; ISC brings them together in one CLI/tray interface instead of duplicating them. Develop new functionality only where the operating system does not already provide an adequate mechanism.
-- **The OS remains authoritative.** ISC must respect existing power policies, inhibitors, permissions and hardware capabilities. Manual Sleep, Keep Awake and future Hibernate controls delegate actual operations to Linux; ISC supplies consistent access and safety checks.
+- **The OS remains authoritative.** ISC must respect existing power policies, inhibitors, permissions and hardware capabilities. Manual Sleep, Keep Awake and Hibernate/Hybrid Sleep controls delegate actual operations to Linux; ISC supplies consistent access and safety checks.
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 
@@ -106,7 +106,7 @@ PYTHONPATH=src python3 -m isc mode --set off
 
 ### Manual Sleep / Suspend (explicit user action only)
 
-Linux `Sleep` and `Suspend` commonly refer to **suspend to RAM**, so ISC uses the *same explicit action* for both. Do not confuse these aliases with `systemctl sleep`, which may choose a different sleep mechanism depending on logind policy. Hibernate-to-disk is a separate future action.
+Linux `Sleep` and `Suspend` commonly refer to **suspend to RAM**, so ISC uses the *same explicit action* for both. Do not confuse these aliases with `systemctl sleep`, which may choose a different sleep mechanism depending on logind policy. Hibernate-to-disk and Hybrid Sleep are distinct, capability-checked native Linux operations.
 
 ```bash
 PYTHONPATH=src python3 -m isc power
@@ -134,7 +134,7 @@ To launch in the logged-in graphical session:
 PYTHONPATH=src /usr/bin/python3 -m isc tray
 ```
 
-The menu exposes **OFF**, **MONITOR**, a **Sleep / Suspend…** dialog, **Status…**, and **Quit**. ON, Keep Awake, Hibernate and Hybrid Sleep are deliberately **disabled** until implemented. When MONITOR is selected in the running tray, ISC starts a **local, tray-owned monitor-only child** using `isc serve --seconds 0`. The tray displays whether its own receiver is running, starting, stopped, or unavailable. OFF stops the tray-owned monitor; Quit also stops it while preserving the stored preference for the next launch. The tray will not stop or replace a receiver started independently in another terminal. It does not autostart at login, install systemd units, or change power settings.
+The menu exposes **OFF**, **MONITOR**, manual **Sleep/Suspend**, **Hibernate**, **Hybrid Sleep**, **Turn Off Displays**, system **Power Profile** selection, **Open System Power Settings**, **Keep Awake**, **Status**, and **Quit**. The ON option remains disabled because automatic suspend safety is not yet verified. Hibernate and Hybrid Sleep are conditional on this host's actual logind support and require typed confirmation. When MONITOR is selected in the running tray, ISC starts a **local, tray-owned monitor-only child** using `isc serve --seconds 0`. The tray displays whether its own receiver is running, starting, stopped, or unavailable. OFF stops the tray-owned monitor; Quit also stops it while preserving the stored preference for the next launch. The tray will not stop or replace a receiver started independently in another terminal. It does not autostart at login, install systemd units, or change power settings.
 
 The tray-managed child inherits only the environment variables needed to read settings and create the local socket—not unrelated API keys or agent secrets. It is started only in response to the persisted MONITOR setting while the tray is running. A monitor that crashes unexpectedly is not automatically respawned in a loop; the status instead reports the failure. No workload-completeness claims follow from a running receiver.
 
@@ -171,18 +171,19 @@ The ISC tray now offers **Keep Awake** presets of **15, 30, 60, 120 or
 240 minutes**, plus **Cancel Keep Awake**. These are explicit user actions,
 independent of the saved OFF/MONITOR preference. The tray reports the remaining
 duration. The inhibitor is released on expiry, cancellation or when the tray
-exits; it is never silently restored at login.
+exits; it is never silently restored at login, including the indefinite choice.
 
-The CLI offers the same timed operation in the **foreground**:
+The tray also offers **Keep Awake — Until Cancelled**, without a time limit, while ISC's tray is running. This setting is not currently restored automatically after the tray exits or after logout. The CLI offers the same operations in the **foreground**:
 
 ```bash
 PYTHONPATH=src /usr/bin/python3 -m isc keep-awake
 PYTHONPATH=src /usr/bin/python3 -m isc keep-awake --minutes 15
+PYTHONPATH=src /usr/bin/python3 -m isc keep-awake --forever
 ```
 
 The first command explains the available durations; the second requests
 and holds a verified `systemd-inhibit --what=idle:sleep --mode=block`
-inhibitor until the selected duration elapses. **Keep the terminal open**;
+inhibitor until the selected duration elapses, or indefinitely until explicitly cancelled when `--forever` is selected. **Keep the terminal open**;
 Ctrl+C cancels the CLI lease immediately. The tray provides its own Cancel
 menu item. These are separate user-owned foreground inhibitors; the CLI
 cannot cancel a lease created in the tray or another terminal.
@@ -199,6 +200,41 @@ changes, or background agent activity are required.
 
 Keep Awake is not the future intelligent suspend decision engine; ISC's
 automatic ON mode remains unavailable.
+
+### Native Linux power controls (power profiles, displays, settings, hibernate)
+
+ISC delegates these actions to existing OS facilities, without implementing a
+separate power daemon. Everything can be accessed from both the tray and CLI.
+
+| Action | CLI command | Native mechanism |
+| --- | --- | --- |
+| Show currently active/available power profiles | \`isc power-profiles\` | \`powerprofilesctl list/get\` |
+| Select a supported performance mode | \`isc power-profiles --profile power-saver\` | \`powerprofilesctl set\` |
+| Check display-only sleep support | \`isc display-off\` | X11 DPMS query |
+| Turn off monitor images (PC keeps running) | \`isc display-off --confirm\` | \`xset dpms force off\` |
+| Open the original GNOME power settings | \`isc power-settings\` | \`gnome-control-center power\` |
+| Preview native Hibernate | \`isc hibernate\` | logind \`CanHibernate\` |
+| Preview native Hybrid Sleep | \`isc hybrid-sleep\` | logind \`CanHybridSleep\` |
+
+For Hibernate/Hybrid Sleep, \`--confirm\` must also be followed by an exact
+typed confirmation (\`HIBERNATE\` or \`HYBRID\`) in an interactive terminal;
+the tray uses an equivalent typed confirmation dialog. Unsupported host
+capabilities, unknown inhibitors, or unverifiable state refuse the action.
+The OS remains the final authority, including authorization and inhibitors.
+A capability of \`yes\` does **not** prove that hibernate/resume will work on
+this machine; actual hardware testing is a separate, user-controlled step.
+
+**Turn Off Displays** is supported only in an Xorg desktop with X11 DPMS
+enabled. It requests a low-power state for connected monitors; it does *not*
+suspend the computer, stop ongoing processing, change system sleep settings,
+or guarantee that the displays remain off when input devices move. Moving
+the mouse or pressing a key normally wakes the screens. Wayland is reported
+as unsupported rather than invoking X11 tools incorrectly.
+
+A power profile is displayed or offered only if the local power-profile
+service actually provides it. ISC does not install or impersonate that
+service. Opening native Power settings reuses the operating system's
+configuration window rather than creating a competing editor.
 
 ## Design and scope
 
