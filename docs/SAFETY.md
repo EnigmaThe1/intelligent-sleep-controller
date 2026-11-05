@@ -26,10 +26,36 @@ Manual sleep is only available behind an explicit interactive double confirmatio
 Keep Awake is entirely opt-in. It prevents systemd-managed automatic idle
 sleep and can block deliberate suspend requests while active. This is
 disclosed in both the CLI and tray; cancel it before requesting manual
-Sleep/Suspend. System shutdown is deliberately *not* inhibited. A maximum
-duration of 240 minutes prevents indefinite locks. The backend refuses to
+Sleep/Suspend. System shutdown is deliberately *not* inhibited. Finite presets are capped at 240 minutes.
+The separately requested **Until Cancelled** mode has no timer and can
+increase power consumption indefinitely while its owning process runs.
+The GUI labels it explicitly; users can cancel at any time, and exiting
+the tray or terminal releases its inhibitor. It is not silently restored
+at the next login. The backend refuses to
 claim success without verifying its own systemd/logind inhibitor and
 releases the owned child on expiry, Ctrl+C or tray exit. Tests mock all
 systemd-inhibit and process-signal operations; CI must never create an
 actual inhibitor or attempt suspend. Keep Awake neither enables nor
 bypasses automatic suspend eligibility checks.
+
+## Native power actions and display-only sleep
+
+ISC queries the host's own logind capability for Hibernate and Hybrid Sleep,
+checks existing sleep inhibitors and known process candidates, and requires
+an unmistakable manual confirmation before asking systemd to perform a
+power operation. Capability alone does not guarantee that the system's
+swap/resume configuration or GPU drivers will resume safely. Actual tests
+must be performed deliberately with saved work and a recovery plan. ISC
+never overrides systemd inhibitors or privileges.
+
+Turning off monitor images is separate from system sleep. On Xorg, ISC
+supports only a confirmed `xset dpms force off` operation after checking
+that X11 DPMS is active. It does not change GNOME's global display idle
+policy or suspend the computer. Wayland sessions must be reported as
+unsupported unless a valid compositor-specific API is available.
+
+Power-profile changes must go through the installed native
+`powerprofilesctl` provider and only expose names actually supported by
+the current machine. This is a deliberate user setting, not a sleep policy
+or an inferred safe-to-suspend signal. Native GNOME Power settings should
+be opened directly rather than replicated in ISC.
