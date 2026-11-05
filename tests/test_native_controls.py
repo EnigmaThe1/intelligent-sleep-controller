@@ -103,6 +103,17 @@ class NativeControlsTests(unittest.TestCase):
         self.assertEqual(spawn.call_args.args[0],
                          ["gnome-control-center", "power"])
 
+    @patch.dict(os.environ, {
+        "DISPLAY": ":0", "SECRET_AGENT_TOKEN": "NEVER_FORWARD",
+    })
+    @patch("isc.native_controls.subprocess.Popen")
+    def test_native_gui_does_not_inherit_unrelated_tokens(self, spawn):
+        open_power_settings()
+        env = spawn.call_args.kwargs["env"]
+        self.assertEqual(env["DISPLAY"], ":0")
+        self.assertNotIn("SECRET_AGENT_TOKEN", env)
+        self.assertNotIn("NEVER_FORWARD", repr(env))
+
     @patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""})
     @patch("isc.native_controls.subprocess.Popen")
     def test_no_graphical_session_cannot_launch_panel(self, spawn):
