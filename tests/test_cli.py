@@ -305,5 +305,48 @@ class CLITests(unittest.TestCase):
         self.assertIn("No software or desktop settings changed.", output.getvalue())
 
 
+    @patch("isc.cli.inspect_autostart")
+    def test_autostart_status_is_read_only(self, inspector):
+        from isc.autostart import AutostartStatus
+        inspector.return_value = AutostartStatus("disabled")
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["autostart"]), 0)
+        inspector.assert_called_once_with()
+        self.assertIn("Status: DISABLED", output.getvalue())
+
+    @patch("isc.cli.modify_autostart")
+    def test_autostart_enable_requires_confirm(self, changer):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["autostart", "--startup", "enable"]), 2)
+        changer.assert_not_called()
+        self.assertIn("--confirm", output.getvalue())
+
+    @patch("isc.cli.modify_autostart")
+    def test_autostart_enable_confirmed_is_explicit(self, changer):
+        from isc.autostart import AutostartStatus
+        changer.return_value = AutostartStatus("enabled", changed=True)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(
+                main(["autostart", "--startup", "enable", "--confirm"]), 0,
+            )
+        changer.assert_called_once_with("enable")
+        self.assertIn("Startup entry updated", output.getvalue())
+        self.assertIn("No GNOME power settings", output.getvalue())
+
+    @patch("isc.cli.modify_autostart")
+    def test_autostart_disable_uses_same_confirmation_gate(self, changer):
+        from isc.autostart import AutostartStatus
+        changer.return_value = AutostartStatus("disabled", changed=True)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(
+                main(["autostart", "--startup", "disable", "--confirm"]), 0,
+            )
+        changer.assert_called_once_with("disable")
+
+
 if __name__ == "__main__":
     unittest.main()

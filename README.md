@@ -138,6 +138,31 @@ The tray-managed child inherits only the environment variables needed to read se
 
 Manual Suspend performs a read-only OS preflight, warns about background work and potential display-resume problems, then requires an explicit dialog click **and typing SUSPEND**. It repeats preflight immediately before requesting `systemctl suspend` with inhibitor checks. Merely opening the menu, changing OFF/MONITOR, or opening Status cannot suspend the machine. Actual suspend/resume on the development desktop remains a deliberate user decision.
 
+### Optional start-at-login registration (disabled by default)
+
+ISC can install **only its own** per-user desktop autostart entry under
+`~/.config/autostart/intelligent-sleep-controller.desktop` (or the
+equivalent XDG configuration directory). The entry invokes the optional ISC
+tray in the logged-in GNOME session. It does not install a system service,
+require root, override GNOME settings, or enable automatic suspension.
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc autostart
+PYTHONPATH=src /usr/bin/python3 -m isc autostart --startup enable --confirm
+PYTHONPATH=src /usr/bin/python3 -m isc autostart --startup disable --confirm
+```
+
+The first command is read-only. Installation and removal require explicit
+`--confirm`; they never start/stop a currently running tray. ISC refuses
+to overwrite or remove a different entry occupying the filename, and keeps
+the startup file private. An enabled entry starts at the **next desktop login**,
+not immediately. If MONITOR is the saved preference, the newly launched tray
+will start a monitor-only receiver; OFF does not start one. This option does
+not turn on automatic power management.
+
+The tray also uses a private session lock to avoid duplicate tray icons and
+competing monitoring children. Other applications are never terminated.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)

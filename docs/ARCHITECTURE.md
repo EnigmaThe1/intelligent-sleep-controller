@@ -115,3 +115,20 @@ Status distinguishes the stored preference from verified tray-child liveness
 and the existence of a discoverable receiver socket. It does not assert
 completeness or safe-to-sleep eligibility. No service manager changes,
 auto-start registration, privileged helper, or automatic suspend path are made.
+
+
+## Optional login startup and single-instance control
+
+ISC's `autostart` CLI manages one specific, privately owned XDG
+autostart desktop entry without overriding existing files. Its direct Exec
+command launches `python -m isc tray` with a local source path. It cannot
+start services, suspend the machine, or change GNOME power settings.
+A matching file is removed only after deliberate approval, without
+disturbing other startup entries. No startup entry is installed by tests.
+
+The tray holds an exclusive, per-user filesystem lock within the private
+XDG runtime directory during its GTK main loop. The lock file remains
+persistent to prevent unlink/inode races; the kernel releases the lock when
+the process exits. Launching a second instance while the lock is held
+exits without starting another tray or MONITOR child. Existing legacy tray
+instances must be closed before using the upgraded single-instance version.

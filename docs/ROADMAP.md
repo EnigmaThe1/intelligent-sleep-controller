@@ -49,7 +49,8 @@
 - [ ] Active children and external waits; no idle assumptions from CPU
 - [x] Optional GTK3/AppIndicator status tray with OFF/MONITOR and guarded manual Suspend (no autostart)
 - [x] Tray-owned MONITOR process starts/stops with persistent OFF/MONITOR choices (not login autostart)
-- [ ] Optional login autostart, supervised recovery, and complete monitoring status after explicit opt-in
+- [x] Optional per-user autostart enable/disable with explicit approval, foreign-file protection and single-instance tray lock (not enabled on host)
+- [ ] Supervised crash recovery and complete monitoring status
 
 ## Phase 4 — portability and releases
 

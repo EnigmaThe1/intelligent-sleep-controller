@@ -12,6 +12,7 @@ from .manual_power import assess_manual_suspend, request_dialog_suspend
 from .receiver import discover_monitor_socket
 from .settings import ModeConfigError, read_mode, set_mode
 from .tray_runtime import TrayMonitorProcess
+from .tray_singleton import TrayAlreadyRunning, TrayLockUnavailable, single_tray_instance
 
 
 @dataclass(frozen=True)
@@ -253,17 +254,24 @@ def run_tray() -> int:
         print("ISC command-line controls are unaffected.")
         return 2
     try:
-        Gtk, GLib, Indicator = _gtk_dependencies()
-        initialized = Gtk.init_check()
-        if not (initialized[0] if isinstance(initialized, tuple) else initialized):
-            print("ISC tray unavailable: no GTK display.")
-            return 2
-        controller = TrayController(Gtk, GLib, Indicator)
-        try:
-            Gtk.main()
-        finally:
-            controller.close()
+        with single_tray_instance():
+            Gtk, GLib, Indicator = _gtk_dependencies()
+            initialized = Gtk.init_check()
+            if not (initialized[0] if isinstance(initialized, tuple) else initialized):
+                print("ISC tray unavailable: no GTK display.")
+                return 2
+            controller = TrayController(Gtk, GLib, Indicator)
+            try:
+                Gtk.main()
+            finally:
+                controller.close()
         return 0
+    except TrayAlreadyRunning:
+        print("ISC tray already running in this user session.")
+        return 2
+    except TrayLockUnavailable:
+        print("ISC tray unavailable: cannot lock private runtime.")
+        return 2
     except (OSError, ImportError, ValueError, RuntimeError):
         print("ISC tray unavailable: GUI backend error.")
         return 2

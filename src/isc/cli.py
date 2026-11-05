@@ -20,6 +20,7 @@ from .settings import ModeConfigError, read_mode, set_mode
 from .service import MonitorUnavailable, serve_monitor
 from .manual_power import assess_manual_suspend, request_manual_suspend
 from .tray import run_tray, backend_probe
+from .autostart import AutostartError, inspect_autostart, modify_autostart
 
 
 def _probe(argv: list[str]) -> str:
@@ -372,6 +373,30 @@ def manual_power(*, confirm: bool, action: str | None) -> int:
     return 0
 
 
+def tray_autostart(*, operation: str | None, confirm: bool) -> int:
+    """Check, enable, or disable ISC user autostart; never start a process."""
+    print("ISC TRAY LOGIN AUTOSTART")
+    try:
+        if operation is None:
+            status = inspect_autostart()
+            print(f"Status: {status.state.upper()}")
+            print("No files modified or processes started.")
+            return 0 if status.state != "unmanaged" else 2
+        if not confirm:
+            print("No changes made. Explicit --confirm is required.")
+            return 2
+        outcome = modify_autostart(operation)
+    except AutostartError as exc:
+        print(f"Operation refused: {str(exc)}")
+        print("Unrelated desktop startup entries were not intentionally changed.")
+        return 2
+    print(f"Status: {outcome.state.upper()}")
+    print("Startup entry updated." if outcome.changed else "Already in requested state.")
+    print("This does not start or stop the current tray session.")
+    print("No GNOME power settings or system services changed.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -379,7 +404,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart"),
         default="status",
     )
     parser.add_argument(
@@ -390,9 +415,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--self-test", action="store_true", help="Send one synthetic Stop event to the private monitor")
     parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
-    parser.add_argument("--confirm", action="store_true", help="Explicitly authorize one selected hook change")
+    parser.add_argument("--confirm", action="store_true", help="Explicitly authorize a selected change or manual suspend")
+    parser.add_argument("--startup", choices=("enable", "disable"), help="User login tray startup control; requires autostart command")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "autostart":
+        if args.set is not None:
+            parser.error("--set is only valid for mode")
+        return tray_autostart(operation=args.startup, confirm=args.confirm)
+    if args.startup is not None:
+        parser.error("--startup is only valid for autostart")
     if args.command == "tray":
         return run_tray()
     if args.command == "tray-check":
