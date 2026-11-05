@@ -274,7 +274,7 @@ class CLITests(unittest.TestCase):
         output = StringIO()
         with contextlib.redirect_stdout(output):
             self.assertEqual(main(["power"]), 0)
-        self.assertIn("Hibernate: future", output.getvalue())
+        self.assertIn("native capability-checked manual actions", output.getvalue())
         request.assert_not_called()
 
     @patch("isc.cli.assess_manual_suspend")
@@ -378,6 +378,65 @@ class CLITests(unittest.TestCase):
             self.assertEqual(main(["keep-awake", "--minutes", "30"]), 2)
         manager.return_value.close.assert_called_once_with()
         self.assertIn("not_verified", output.getvalue())
+
+
+    @patch("isc.cli.KeepAwakeManager")
+    def test_indefinite_keep_awake_is_explicit_and_cancellable(self, manager):
+        from isc.keepawake import KeepAwakeStatus
+        lease = manager.return_value
+        lease.start.return_value = KeepAwakeStatus(True, None)
+        lease.status.return_value = KeepAwakeStatus(False)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["keep-awake", "--forever"]), 0)
+        lease.start.assert_called_once_with(None)
+        lease.close.assert_called_once_with()
+        self.assertIn("until cancelled", output.getvalue())
+
+    @patch("isc.cli.power_profiles")
+    def test_power_profile_status_is_read_only(self, profiles):
+        from isc.native_controls import PowerProfiles
+        profiles.return_value = PowerProfiles("balanced", ("balanced", "power-saver"))
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["power-profiles"]), 0)
+        self.assertIn("balanced", output.getvalue())
+
+    @patch("isc.cli.set_profile")
+    def test_power_profile_explicit_selection(self, change):
+        from isc.native_controls import PowerProfiles
+        change.return_value = PowerProfiles("power-saver", ("balanced", "power-saver"))
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["power-profiles", "--profile", "power-saver"]), 0)
+        change.assert_called_once_with("power-saver")
+
+    @patch("isc.cli.display_support", return_value=(True, "x11_dpms_available"))
+    @patch("isc.cli.display_off")
+    def test_display_off_preview_does_not_turn_off_screen(self, action, support):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["display-off"]), 0)
+        action.assert_not_called()
+        self.assertIn("PREVIEW ONLY", output.getvalue())
+
+    @patch("isc.cli.open_power_settings")
+    def test_power_settings_uses_original_gnome_ui(self, opener):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["power-settings"]), 0)
+        opener.assert_called_once_with()
+
+    @patch("isc.cli.assess_native_sleep")
+    @patch("isc.cli.request_terminal_sleep")
+    def test_hibernate_preview_never_requests_sleep(self, request, assess):
+        from isc.native_sleep import NativeSleepAssessment
+        assess.return_value = NativeSleepAssessment("hibernate", "yes", (), 0)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["hibernate"]), 0)
+        request.assert_not_called()
+        self.assertIn("PREVIEW ONLY", output.getvalue())
 
 
 if __name__ == "__main__":
