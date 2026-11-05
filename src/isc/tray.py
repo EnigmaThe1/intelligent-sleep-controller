@@ -11,6 +11,7 @@ import os
 from .manual_power import assess_manual_suspend, request_dialog_suspend
 from .receiver import discover_monitor_socket
 from .settings import ModeConfigError, read_mode, set_mode
+from .tray_runtime import TrayMonitorProcess
 
 
 @dataclass(frozen=True)
@@ -70,11 +71,13 @@ def _gtk_dependencies():
 
 
 class TrayController:
-    """User-invoked menu; does not start a background ISC receiver."""
+    """User-invoked menu supervising a local MONITOR-only child process."""
 
     def __init__(self, Gtk, GLib, Indicator):
         self.Gtk = Gtk
         self._refreshing = True
+        self._monitor_process = TrayMonitorProcess()
+        self._monitor_state = "off"
         self.indicator = Indicator.Indicator.new(
             "intelligent-sleep-controller",
             "system-suspend-symbolic",
@@ -102,7 +105,7 @@ class TrayController:
         self._disabled("Keep Awake — planned")
         self._item("Status…", self._status)
         self._separator()
-        self._item("Quit ISC tray", lambda _item: Gtk.main_quit())
+        self._item("Quit ISC tray", self._quit)
         self.menu.show_all()
         self.indicator.set_menu(self.menu)
         self._refreshing = False
@@ -154,30 +157,50 @@ class TrayController:
 
     def refresh(self):
         state = tray_snapshot()
+        self._monitor_state = self._monitor_process.reconcile(
+            mode=state.mode, config_valid=state.valid,
+        )
         self._refreshing = True
         try:
             mode = state.mode.upper() if state.valid else "OFF (invalid config)"
             self.title.set_label("Intelligent Sleep Controller — " + mode)
             self.off.set_active(state.mode == "off")
             self.monitor.set_active(state.mode == "monitor")
+            state_labels = {
+                "off": "Monitoring: stopped (OFF)",
+                "running": "Monitoring: receiver active (not authoritative)",
+                "starting": "Monitoring: starting",
+                "external": "Monitoring: external receiver (not owned)",
+                "failed": "Monitoring: unavailable; see CLI",
+                "invalid_configuration": "Monitoring: OFF (unsafe configuration)",
+            }
             self.receiver_label.set_label(
-                "Receiver: socket advertised (unverified)"
-                if state.receiver_advertised else "Receiver: not advertised"
+                state_labels.get(self._monitor_state, "Monitoring: unknown")
             )
         finally:
             self._refreshing = False
         return True
 
     def _status(self, _item):
+        self.refresh()
         state = tray_snapshot()
         mode = state.mode.upper() if state.valid else "OFF (invalid config)"
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
+            f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
-            "The tray does not start a monitoring service.\n"
+            "Only privacy-limited lifecycle metadata is collected.\n"
+            "Full workload coverage is not verified.\n"
             "Automatic suspension is not implemented.",
         )
+
+    def _quit(self, _item):
+        self._monitor_process.close()
+        self.Gtk.main_quit()
+
+    def close(self):
+        self._monitor_process.close()
 
     def _suspend(self, _item):
         assessment = assess_manual_suspend()
@@ -236,7 +259,10 @@ def run_tray() -> int:
             print("ISC tray unavailable: no GTK display.")
             return 2
         controller = TrayController(Gtk, GLib, Indicator)
-        Gtk.main()
+        try:
+            Gtk.main()
+        finally:
+            controller.close()
         return 0
     except (OSError, ImportError, ValueError, RuntimeError):
         print("ISC tray unavailable: GUI backend error.")

@@ -6,7 +6,7 @@ ISC aims to let a Linux computer sleep when autonomous work is **safely idle**, 
 
 ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude, Codex, Ollama, or any AI service. Application-specific integrations will be optional.
 
-> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, hold inhibitors, or suspend a computer**. ON, automatic suspend, and continuous background monitoring are **not implemented**.
+> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, hold inhibitors, or suspend a computer**. ON, automatic suspend, and login-started background monitoring are **not implemented**. An optional running tray can now supervise a local monitor-only process.
 
 ## Principles
 
@@ -132,7 +132,9 @@ To launch in the logged-in graphical session:
 PYTHONPATH=src /usr/bin/python3 -m isc tray
 ```
 
-The menu exposes **OFF**, **MONITOR**, a **Sleep / Suspend…** dialog, **Status…**, and **Quit**. ON, Keep Awake, Hibernate and Hybrid Sleep are deliberately **disabled** until implemented. The tray does not launch the background monitoring service: MONITOR currently saves a preference, while `isc serve` must be started separately. It does not autostart at login or change power settings.
+The menu exposes **OFF**, **MONITOR**, a **Sleep / Suspend…** dialog, **Status…**, and **Quit**. ON, Keep Awake, Hibernate and Hybrid Sleep are deliberately **disabled** until implemented. When MONITOR is selected in the running tray, ISC starts a **local, tray-owned monitor-only child** using `isc serve --seconds 0`. The tray displays whether its own receiver is running, starting, stopped, or unavailable. OFF stops the tray-owned monitor; Quit also stops it while preserving the stored preference for the next launch. The tray will not stop or replace a receiver started independently in another terminal. It does not autostart at login, install systemd units, or change power settings.
+
+The tray-managed child inherits only the environment variables needed to read settings and create the local socket—not unrelated API keys or agent secrets. It is started only in response to the persisted MONITOR setting while the tray is running. A monitor that crashes unexpectedly is not automatically respawned in a loop; the status instead reports the failure. No workload-completeness claims follow from a running receiver.
 
 Manual Suspend performs a read-only OS preflight, warns about background work and potential display-resume problems, then requires an explicit dialog click **and typing SUSPEND**. It repeats preflight immediately before requesting `systemctl suspend` with inhibitor checks. Merely opening the menu, changing OFF/MONITOR, or opening Status cannot suspend the machine. Actual suspend/resume on the development desktop remains a deliberate user decision.
 

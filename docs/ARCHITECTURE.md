@@ -99,3 +99,19 @@ Manual power is separate from automatic ON/OFF/MONITOR. A user explicitly invoki
 ## Optional GNOME tray (no autostart)
 
 `src/isc/tray.py` imports PyGObject only on demand. The tray displays the existing persistent OFF/MONITOR preferences, without claiming an advertised socket proves workload coverage. The tray does not start monitoring automatically, install a systemd unit, or change GNOME power settings. Unsupported ON, Hibernate, Hybrid Sleep and Keep Awake menu items are disabled. Manual Suspend is protected by a preflight check, a warning dialog with an explicit typed phrase, and a fresh systemd inhibitor-aware check. The normal CLI remains usable without PyGObject or a GNOME desktop.
+
+## Tray-owned monitor-only process lifecycle
+
+The optional GTK/AppIndicator tray manages a single local monitor child in
+`src/isc/tray_runtime.py`. The child runs the existing `isc serve --seconds 0`
+command and inherits only a minimal environment needed for the user-owned socket
+and settings. Choosing MONITOR or reopening the manually launched tray while
+MONITOR remains selected starts its receiver; switching OFF or exiting the tray
+stops **only the monitor child it created**, with a graceful interrupt and
+bounded fallback. A pre-existing receiver started by another process is
+reported as external and never terminated by the tray. An unexpected child
+exit is reported as a failure instead of creating an uncontrolled restart loop.
+Status distinguishes the stored preference from verified tray-child liveness
+and the existence of a discoverable receiver socket. It does not assert
+completeness or safe-to-sleep eligibility. No service manager changes,
+auto-start registration, privileged helper, or automatic suspend path are made.

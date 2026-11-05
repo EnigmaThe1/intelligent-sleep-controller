@@ -48,7 +48,8 @@
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs
 - [ ] Active children and external waits; no idle assumptions from CPU
 - [x] Optional GTK3/AppIndicator status tray with OFF/MONITOR and guarded manual Suspend (no autostart)
-- [ ] Desktop autostart and live monitoring integrated only after explicit operator opt-in
+- [x] Tray-owned MONITOR process starts/stops with persistent OFF/MONITOR choices (not login autostart)
+- [ ] Optional login autostart, supervised recovery, and complete monitoring status after explicit opt-in
 
 ## Phase 4 — portability and releases
 
