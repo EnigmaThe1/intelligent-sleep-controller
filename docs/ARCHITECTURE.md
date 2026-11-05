@@ -204,3 +204,32 @@ other processes. A failed identity check does not attempt to kill a guessed
 process. Inhibitors naturally expire when their wrapped sleep command ends.
 No inhibitor is acquired by MONITOR mode selection, login autostart or
 normal background observation.
+
+## Extended native desktop power controls
+
+The same native-control backend serves CLI and tray actions:
+
+- **Power profiles:** query `powerprofilesctl list` and `get`, and only allow
+  changing to names returned by the host. Confirm a successful change by
+  querying the actual profile again; never impose an ISC-specific profile.
+- **Display-only off:** in the current Xorg desktop, verify `xset q` reports
+  DPMS enabled, then explicitly request `xset dpms force off`. The machine
+  continues its jobs; input activity can re-light the displays. This is not
+  a system suspend request or a GNOME timeout modification. Future Wayland
+  support must use an appropriate native compositor interface, not pretend
+  X11 DPMS is a universal API.
+- **Native settings:** launch `gnome-control-center power`, preserving the
+  system's original editor, controls, permissions, and persistence.
+- **Hibernate and Hybrid Sleep:** capability discovery via logind's
+  `CanHibernate` and `CanHybridSleep`, with invariant inhibitor/workload
+  preflight checks and an explicit typed confirmation; the actual request
+  is made using systemd's native verbs. Do not equate advertised capability
+  with verified hardware or disk-resume reliability.
+- **Indefinite Keep Awake:** the user may explicitly request `sleep infinity`
+  under a native `systemd-inhibit` lock. It never expires on a timer, but
+  exits when cancelled, the tray closes, or the owning foreground CLI ends.
+  It does not persist a lock across logout/reboot or turn OFF into ON.
+  Finite timed locks retain the existing native mechanism.
+
+The ISC automatic ON action remains disabled. New manual capabilities
+are not evidence that the autonomous workload-coverage requirement is met.
