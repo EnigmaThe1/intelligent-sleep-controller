@@ -2,6 +2,60 @@
 
 ISC is standalone, offline, and Linux-first. This is a **design document**, not a claim that the daemon or integrations already exist.
 
+## Design requirement: OS-native first; ISC as the central power-management hub
+
+ISC is a **control plane over Linux power management**, not a replacement
+implementation of facilities already provided by the operating system.
+
+For every new power-management feature:
+
+1. **Inventory native capabilities first.** Prefer supported Linux/systemd-logind
+   D-Bus interfaces, systemd commands/units/inhibitors/timers, GNOME desktop
+   integration and kernel-exposed capabilities where appropriate. Check support
+   on the current host rather than assuming a feature is universally available.
+2. **Delegate execution to the operating system.** ISC's CLI and tray expose
+   existing suspend, hibernate, power-state checks, inhibition and related
+   controls through a common interface. OS permissions, authentication,
+   inhibitors, and policy remain authoritative; ISC must not silently bypass
+   them or replace their implementation with home-grown equivalents.
+3. **Implement only genuine gaps.** ISC-specific development is justified for
+   multi-application activity correlation, conservative autonomous-idle
+   decisions, user-selected modes, monitoring, explainability, integration,
+   and orchestration that the OS cannot provide as a complete solution.
+4. **Maintain behavioural parity.** Where a user-facing tray action and CLI
+   action represent the same operation, route both through the same backend
+   and state model. Keep the CLI functional without a graphical desktop.
+5. **Prefer reversible, scoped integration.** Avoid unnecessary changes to
+   GNOME power preferences or systemd configuration, never install competing
+   power daemons by default, and preserve OFF/monitor-only controls.
+6. **Respect hardware limitations.** Report native capability availability
+   and blockers accurately. Do not invent hibernate or hybrid-sleep support
+   when the kernel, swap/resume configuration or login manager does not
+   support it. Never imply a completed suspend/resume cycle merely because
+   systemd accepted a request.
+7. **Re-evaluate before introducing custom mechanisms.** Record why native
+   system features are insufficient and what extra functionality ISC adds.
+   Do not create duplicate schedulers, inhibitors, polling protocols, sleep
+   executors or storage mechanisms without a concrete, justified need.
+
+### Native mechanisms already reused
+
+| ISC control or input | OS-provided mechanism | ISC responsibility |
+| --- | --- | --- |
+| Manual Sleep / Suspend | `systemd-logind` capability inquiry and `systemctl suspend` | UI, preview, confirmation and safe hand-off |
+| Time-limited Keep Awake | `systemd-inhibit` / logind inhibition | Bounded presets, verification and user cancellation |
+| Current sleep inhibitors | logind inhibitor inventory | Read-only presentation and conservative gating |
+| User idle observation | GNOME Mutter IdleMonitor | Read-only idle signal, not automatic proof of inactivity |
+| Login startup | XDG per-user autostart entry | Explicit opt-in and reversible registration |
+| Tray indicator | GTK and Ayatana/AppIndicator | Optional GUI around shared backend controls |
+| Hibernate / hybrid sleep | Existing logind/systemd power capabilities, when supported | Future detection and guarded exposure, not reimplementation |
+| Intelligent task-aware auto-suspend | No complete equivalent for arbitrary workflows | ISC's additional safe work-state coordination (future ON mode) |
+
+**Scope:** ISC is the single *user-facing hub*, while Linux retains
+responsibility for actually performing system power operations. User
+intent and ISC's safety policy determine *when to request* a native OS
+operation; they never supplant the OS's authority to accept or refuse it.
+
 ## Layers
 
 1. **Adapters** report trusted lifecycle events from independent applications; app-specific packages are optional.

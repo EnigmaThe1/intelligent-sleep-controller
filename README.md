@@ -16,6 +16,8 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Human blockers are different.** Waiting for a person's input can become sleep-eligible *only* after child work has finished and other safety conditions hold.
 - **Explicit operator control.** Future modes: ON (safety-gated auto-suspend), OFF (no ISC-initiated auto-suspend), MONITOR (decisions without suspend), and temporary Keep Awake. Persistent settings and an easy desktop toggle are required.
 - **Least privilege, offline operation.** No API keys, accounts, telemetry, or internet connection required for normal operation.
+- **OS-native first; one power hub.** Reuse supported systemd-logind, kernel and GNOME facilities for existing power operations; ISC brings them together in one CLI/tray interface instead of duplicating them. Develop new functionality only where the operating system does not already provide an adequate mechanism.
+- **The OS remains authoritative.** ISC must respect existing power policies, inhibitors, permissions and hardware capabilities. Manual Sleep, Keep Awake and future Hibernate controls delegate actual operations to Linux; ISC supplies consistent access and safety checks.
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 

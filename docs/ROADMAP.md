@@ -1,5 +1,14 @@
 # Roadmap
 
+## Engineering constraint — reuse Linux facilities
+
+- [x] Adopt OS-native-first architecture: ISC is a common CLI/tray power-management hub, not a competing implementation.
+- [ ] Audit each new control for existing logind/systemd, GNOME and kernel support before writing a new mechanism.
+- [ ] Expose additional supported OS power controls (hibernate, hybrid sleep, etc.) only after capability and hardware safety verification.
+- [ ] Keep command-line and tray operations backed by shared execution paths; preserve native inhibitors and permissions.
+- [ ] Build custom autonomous scheduling only for demonstrable gaps in native task-aware idle detection.
+
+
 ## Phase 0 — repository foundation (this branch)
 
 - [x] Apache 2.0 licence (already present in repository)
