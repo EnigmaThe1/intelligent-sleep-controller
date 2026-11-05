@@ -73,6 +73,23 @@ def open_power_settings():
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         raise NativeControlError("no_graphical_session")
     try:
-        subprocess.Popen(["gnome-control-center", "power"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        safe_env = {
+            key: os.environ[key]
+            for key in (
+                "HOME", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "PATH",
+                "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
+                "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+                "LANG", "LC_ALL", "GDK_BACKEND",
+            )
+            if key in os.environ
+        }
+        subprocess.Popen(
+            ["gnome-control-center", "power"],
+            env=safe_env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
     except OSError:
         raise NativeControlError("gnome_power_settings_unavailable") from None
