@@ -14,6 +14,11 @@ from .settings import ModeConfigError, read_mode, set_mode
 from .tray_runtime import TrayMonitorProcess
 from .tray_singleton import TrayAlreadyRunning, TrayLockUnavailable, single_tray_instance
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
+from .native_controls import (
+    NativeControlError, PROFILES, power_profiles, set_profile,
+    display_support, display_off, open_power_settings,
+)
+from .native_sleep import assess_native_sleep, request_native_sleep
 
 
 @dataclass(frozen=True)
@@ -102,8 +107,16 @@ class TrayController:
         self._disabled("ON — unavailable")
         self._separator()
         self._item("Sleep / Suspend…", self._suspend)
-        self._disabled("Hibernate — planned")
-        self._disabled("Hybrid Sleep — planned")
+        self._item("Hibernate…", lambda item: self._native_sleep(item, "hibernate"))
+        self._item("Hybrid Sleep…", lambda item: self._native_sleep(item, "hybrid-sleep"))
+        self._item("Turn Off Displays…", self._display_off)
+        self._separator()
+        self.profiles_item = Gtk.MenuItem.new_with_label("Power Profile")
+        self.profiles_menu = Gtk.Menu()
+        self.profiles_item.set_submenu(self.profiles_menu)
+        self.profiles_menu.connect("show", self._refresh_profiles)
+        self.menu.append(self.profiles_item)
+        self._item("Open System Power Settings…", self._open_system_power)
         self._separator()
         self.awake_menu_item = Gtk.MenuItem.new_with_label("Keep Awake")
         self.awake_submenu = Gtk.Menu()
@@ -111,6 +124,9 @@ class TrayController:
             item = Gtk.MenuItem.new_with_label(f"Keep Awake for {minutes} minutes")
             item.connect("activate", self._awake_start, minutes)
             self.awake_submenu.append(item)
+        forever_item = Gtk.MenuItem.new_with_label("Keep Awake — Until Cancelled")
+        forever_item.connect("activate", self._awake_start, None)
+        self.awake_submenu.append(forever_item)
         self.awake_submenu.append(Gtk.SeparatorMenuItem())
         cancel_item = Gtk.MenuItem.new_with_label("Cancel Keep Awake")
         cancel_item.connect("activate", self._awake_cancel)
@@ -194,12 +210,130 @@ class TrayController:
             )
             awake = self._awake.status()
             self.awake_label.set_label(
-                f"Keep Awake: active ({(awake.remaining_seconds + 59) // 60} min remaining)"
-                if awake.requested else "Keep Awake: inactive"
+                (
+                    "Keep Awake: until cancelled"
+                    if awake.remaining_seconds is None
+                    else f"Keep Awake: active ({(awake.remaining_seconds + 59) // 60} min remaining)"
+                ) if awake.requested else "Keep Awake: inactive"
             )
         finally:
             self._refreshing = False
         return True
+
+    def _refresh_profiles(self, _widget):
+        for item in self.profiles_menu.get_children():
+            self.profiles_menu.remove(item)
+        try:
+            state = power_profiles()
+            labels = {
+                "power-saver": "Energy Saver",
+                "balanced": "Balanced",
+                "performance": "Performance",
+            }
+            for profile in state.available:
+                prefix = "● " if state.current == profile else "   "
+                item = self.Gtk.MenuItem.new_with_label(
+                    prefix + labels.get(profile, profile)
+                )
+                item.connect("activate", self._select_profile, profile)
+                self.profiles_menu.append(item)
+        except NativeControlError:
+            item = self.Gtk.MenuItem.new_with_label(
+                "OS power-profile service unavailable"
+            )
+            item.set_sensitive(False)
+            self.profiles_menu.append(item)
+        self.profiles_menu.show_all()
+
+    def _select_profile(self, _item, profile):
+        try:
+            set_profile(profile)
+        except NativeControlError as exc:
+            self._notice(
+                "Power profile unavailable", str(exc), error=True,
+            )
+
+    def _open_system_power(self, _item):
+        try:
+            open_power_settings()
+        except NativeControlError as exc:
+            self._notice("Unable to open GNOME Power settings", str(exc), error=True)
+
+    def _display_off(self, _item):
+        available, reason = display_support()
+        if not available:
+            self._notice(
+                "Display-only sleep unavailable",
+                reason + ". This version supports Xorg DPMS only.",
+                error=True,
+            )
+            return
+        Gtk = self.Gtk
+        prompt = Gtk.MessageDialog(
+            transient_for=None, flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Turn off the monitor images?",
+        )
+        prompt.format_secondary_text(
+            "Only the displays will enter low-power mode. "
+            "The computer and background tasks keep running. "
+            "Keyboard or mouse activity normally wakes the displays."
+        )
+        prompt.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        prompt.add_button("Turn Off Displays", Gtk.ResponseType.OK)
+        try:
+            accepted = prompt.run() == Gtk.ResponseType.OK
+        finally:
+            prompt.destroy()
+        if accepted:
+            try:
+                display_off(confirm=True)
+            except NativeControlError as exc:
+                self._notice("Display-off request refused", str(exc), error=True)
+
+    def _native_sleep(self, _item, mode):
+        assessment = assess_native_sleep(mode)
+        if not assessment.request_possible:
+            self._notice(
+                mode + " unavailable",
+                "Linux currently reports: "
+                + assessment.capability + ". "
+                + ", ".join(assessment.blockers),
+                error=True,
+            )
+            return
+        Gtk = self.Gtk
+        phrase = "HIBERNATE" if mode == "hibernate" else "HYBRID"
+        prompt = Gtk.Dialog(
+            title=mode + " this computer?",
+            transient_for=None, flags=Gtk.DialogFlags.MODAL,
+        )
+        prompt.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        prompt.add_button("Proceed", Gtk.ResponseType.OK)
+        label = Gtk.Label(
+            label="Save all work first. Linux reports this mode is supported, "
+                  "but resume reliability is not verified.\n"
+                  "Type " + phrase + " to confirm this power action."
+        )
+        label.set_line_wrap(True)
+        label.set_max_width_chars(58)
+        prompt.get_content_area().add(label)
+        phrase_entry = Gtk.Entry()
+        phrase_entry.set_placeholder_text("Type " + phrase)
+        prompt.get_content_area().add(phrase_entry)
+        prompt.get_content_area().show_all()
+        try:
+            accepted = prompt.run() == Gtk.ResponseType.OK
+            entered = phrase_entry.get_text() if accepted else ""
+        finally:
+            prompt.destroy()
+        if accepted:
+            result = request_native_sleep(mode, confirmed=True, typed=entered)
+            if not result.submitted:
+                self._notice(
+                    "No power request made", result.reason, error=True,
+                )
 
     def _awake_start(self, _item, minutes):
         try:
@@ -238,7 +372,7 @@ class TrayController:
             f"Mode preference: {mode}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
-            f"Keep Awake: {'active' if self._awake.status().requested else 'inactive'}\n"
+            f"Keep Awake: {'until cancelled' if self._awake.status().requested and self._awake.status().remaining_seconds is None else 'active' if self._awake.status().requested else 'inactive'}\n"
             "Only privacy-limited lifecycle metadata is collected.\n"
             "Full workload coverage is not verified.\n"
             "Automatic suspension is not implemented.",
