@@ -30,19 +30,19 @@ class KeepAwakeError(RuntimeError):
 @dataclass(frozen=True)
 class KeepAwakeStatus:
     requested: bool
-    remaining_seconds: int = 0
+    remaining_seconds: int | None = 0
 
 
-def inhibitor_command(minutes: int, marker: str) -> tuple[str, ...]:
+def inhibitor_command(minutes: int | None, marker: str) -> tuple[str, ...]:
     """No shell and no user-supplied command text."""
-    if type(minutes) is not int or minutes not in PRESETS_MINUTES:
+    if minutes is not None and (type(minutes) is not int or minutes not in PRESETS_MINUTES):
         raise KeepAwakeError("unsupported_duration")
     if not marker or not marker.isascii() or not marker.isalnum():
         raise KeepAwakeError("invalid_marker")
     return (
         INHIBITOR_EXECUTABLE, "--what=idle:sleep", "--mode=block",
         f"--who={LOCK_OWNER}", f"--why=ISC timed Keep Awake {marker}",
-        SLEEP_EXECUTABLE, str(minutes * 60),
+        SLEEP_EXECUTABLE, "infinity" if minutes is None else str(minutes * 60),
     )
 
 
@@ -95,17 +95,19 @@ class KeepAwakeManager:
 
     def __init__(self):
         self._child: subprocess.Popen | None = None
-        self._expires_at = 0.0
+        self._expires_at: float | None = 0.0
         self._marker: str | None = None
 
     def status(self) -> KeepAwakeStatus:
         child = self._child
         if child is None or child.poll() is not None:
             return KeepAwakeStatus(False)
+        if self._expires_at is None:
+            return KeepAwakeStatus(True, None)
         remaining = max(0, math.ceil(self._expires_at - time.monotonic()))
         return KeepAwakeStatus(remaining > 0, remaining)
 
-    def start(self, minutes: int) -> KeepAwakeStatus:
+    def start(self, minutes: int | None) -> KeepAwakeStatus:
         # Validate before stopping an existing lease.
         marker = secrets.token_hex(8)
         argv = inhibitor_command(minutes, marker)
@@ -127,7 +129,7 @@ class KeepAwakeManager:
             raise KeepAwakeError("inhibitor_start_failed") from None
         self._child = child
         self._marker = marker
-        self._expires_at = time.monotonic() + minutes * 60
+        self._expires_at = None if minutes is None else time.monotonic() + minutes * 60
         # The lock is only considered active after it is actually observed in
         # logind. A live subprocess alone is insufficient evidence.
         deadline = time.monotonic() + 2.5
