@@ -23,6 +23,11 @@ from .manual_power import assess_manual_suspend, request_manual_suspend
 from .tray import run_tray, backend_probe
 from .autostart import AutostartError, inspect_autostart, modify_autostart
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
+from .native_controls import (
+    NativeControlError, PROFILES, power_profiles, set_profile,
+    display_support, display_off, open_power_settings,
+)
+from .native_sleep import assess_native_sleep, request_terminal_sleep
 
 
 def _probe(argv: list[str]) -> str:
@@ -345,7 +350,7 @@ def manual_power(*, confirm: bool, action: str | None) -> int:
     if action is None:
         print("ISC MANUAL POWER")
         print("Sleep / Suspend: available as the same suspend-to-RAM action")
-        print("Hibernate: future separate action (not enabled)")
+        print("Hibernate / Hybrid Sleep: native capability-checked manual actions")
         print("Manual suspend works even when ISC automatic mode is OFF.")
         print("Use 'isc suspend' for a read-only assessment.")
         print("ISC automatic suspend: NOT IMPLEMENTED")
@@ -399,22 +404,23 @@ def tray_autostart(*, operation: str | None, confirm: bool) -> int:
     return 0
 
 
-def keep_awake_cli(minutes: int | None) -> int:
+def keep_awake_cli(minutes: int | None, forever: bool = False) -> int:
     """Foreground timed inhibitor: Ctrl+C releases, no background daemon."""
-    if minutes is None:
+    if minutes is None and not forever:
         print("ISC KEEP AWAKE")
         print("Available durations (minutes): " + ", ".join(map(str, PRESETS_MINUTES)))
-        print("Use: isc keep-awake --minutes 15")
+        print("Use: isc keep-awake --minutes 15, or --forever")
         print("The terminal stays occupied; Ctrl+C cancels the inhibitor.")
         print("No Keep Awake operation started.")
         return 0
     guard = KeepAwakeManager()
     try:
-        state = guard.start(minutes)
+        state = guard.start(None if forever else minutes)
         if not state.requested:
             print("Keep Awake refused: systemd inhibitor not verified.")
             return 2
-        print(f"Keep Awake verified for up to {minutes} minutes.")
+        duration = "until cancelled (no timer)" if forever else f"up to {minutes} minutes"
+        print(f"Keep Awake verified: {duration}.")
         print("Automatic idle sleep and suspend are temporarily inhibited.")
         print("This terminal must remain open. Press Ctrl+C to cancel.")
         try:
@@ -434,6 +440,66 @@ def keep_awake_cli(minutes: int | None) -> int:
             print("WARNING: could not verify inhibitor cancellation.")
 
 
+def native_sleep_cli(action: str, confirmed: bool) -> int:
+    assessment = assess_native_sleep(action)
+    print(f"ISC NATIVE {action.upper()} PREVIEW")
+    print(f"Logind capability: {assessment.capability}")
+    print(f"Known candidate processes (activity UNKNOWN): {assessment.candidate_processes}")
+    print("Full workload coverage and hardware resume: NOT VERIFIED")
+    if assessment.blockers:
+        print("Request blocked: " + ", ".join(assessment.blockers))
+        return 2
+    if not confirmed:
+        print("PREVIEW ONLY. Use --confirm and a typed phrase for a manual action.")
+        return 0
+    outcome = request_terminal_sleep(action, confirmed=True)
+    print(
+        "Native OS request accepted (resume unverified)."
+        if outcome.submitted else "No power request made: " + outcome.reason
+    )
+    return 0 if outcome.submitted else 2
+
+
+def profile_cli(name: str | None) -> int:
+    try:
+        info = set_profile(name) if name is not None else power_profiles()
+    except NativeControlError as exc:
+        print("Native power profiles unavailable: " + str(exc))
+        return 2
+    print("OS power profile: " + info.current)
+    print("Available on this host: " + ", ".join(info.available))
+    return 0
+
+
+def display_off_cli(*, confirmed: bool) -> int:
+    supported, reason = display_support()
+    print("Display-only power: " + reason)
+    if not supported:
+        print("No change made; X11 DPMS is not available in this session.")
+        return 2
+    if not confirmed:
+        print("PREVIEW ONLY. Use display-off --confirm to turn off the image.")
+        print("The computer continues working; keyboard or mouse activity can wake the display.")
+        return 0
+    try:
+        display_off(confirm=True)
+    except NativeControlError as exc:
+        print("Display power action refused: " + str(exc))
+        return 2
+    print("Display-off request sent; system remains running.")
+    return 0
+
+
+def power_settings_cli() -> int:
+    try:
+        open_power_settings()
+    except NativeControlError as exc:
+        print("GNOME Power settings unavailable: " + str(exc))
+        return 2
+    print("Opened the operating system's Power settings.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -441,7 +507,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings"),
         default="status",
     )
     parser.add_argument(
@@ -455,12 +521,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize a selected change or manual suspend")
     parser.add_argument("--startup", choices=("enable", "disable"), help="User login tray startup control; requires autostart command")
     parser.add_argument("--minutes", type=int, choices=PRESETS_MINUTES, help="Keep Awake duration in minutes")
+    parser.add_argument("--forever", action="store_true", help="Keep Awake until cancelled while this terminal is running")
+    parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
     if args.command == "keep-awake":
-        return keep_awake_cli(args.minutes)
-    if args.minutes is not None:
-        parser.error("--minutes is only valid for keep-awake")
+        if args.forever and args.minutes is not None:
+            parser.error("choose either --forever or --minutes")
+        return keep_awake_cli(args.minutes, forever=args.forever)
+    if args.minutes is not None or args.forever:
+        parser.error("--minutes/--forever are only valid for keep-awake")
+    if args.command == "power-profiles":
+        return profile_cli(args.profile)
+    if args.profile is not None:
+        parser.error("--profile is only valid for power-profiles")
+    if args.command == "display-off":
+        return display_off_cli(confirmed=args.confirm)
+    if args.command == "power-settings":
+        return power_settings_cli()
+    if args.command in ("hibernate", "hybrid-sleep"):
+        return native_sleep_cli(args.command, confirmed=args.confirm)
     if args.command == "autostart":
         if args.set is not None:
             parser.error("--set is only valid for mode")
