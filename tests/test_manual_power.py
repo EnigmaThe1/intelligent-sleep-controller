@@ -176,5 +176,54 @@ class ManualPowerTests(unittest.TestCase):
         self.assertNotIn("private", str(result))
 
 
+    @patch("isc.manual_power.subprocess.run", side_effect=AssertionError("power action"))
+    def test_gui_requires_exact_typed_confirmation(self, run):
+        from isc.manual_power import request_dialog_suspend
+        for confirmed, typed in (
+            (False, "SUSPEND"), (True, ""), (True, "suspend"),
+            (True, "SUSPEND "),
+        ):
+            with self.subTest(confirmed=confirmed, typed=typed):
+                result = request_dialog_suspend(confirmed=confirmed, typed=typed)
+                self.assertFalse(result.submitted)
+                self.assertEqual(result.reason, "dialog_confirmation_required")
+        run.assert_not_called()
+
+    @patch("isc.manual_power.assess_manual_suspend")
+    @patch("isc.manual_power.subprocess.run", side_effect=AssertionError("power action"))
+    def test_gui_fresh_preflight_can_block_suspend(self, run, check):
+        from isc.manual_power import request_dialog_suspend
+        check.return_value = SimpleNamespace(request_possible=False)
+        outcome = request_dialog_suspend(confirmed=True, typed="SUSPEND")
+        self.assertEqual(outcome.reason, "preflight_blocked")
+        run.assert_not_called()
+
+    @patch("isc.manual_power.assess_manual_suspend")
+    @patch("isc.manual_power.subprocess.run")
+    def test_gui_request_double_checks_and_respects_inhibitors(self, run, check):
+        from isc.manual_power import request_dialog_suspend
+        check.return_value = SimpleNamespace(request_possible=True)
+        run.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+        result = request_dialog_suspend(confirmed=True, typed="SUSPEND")
+        self.assertTrue(result.submitted)
+        self.assertEqual(check.call_count, 2)
+        self.assertEqual(
+            run.call_args.args[0],
+            ["systemctl", "--check-inhibitors=yes", "suspend"],
+        )
+
+    @patch("isc.manual_power.assess_manual_suspend")
+    @patch("isc.manual_power.subprocess.run", side_effect=AssertionError("power action"))
+    def test_gui_second_preflight_can_cancel(self, run, check):
+        from isc.manual_power import request_dialog_suspend
+        check.side_effect = [
+            SimpleNamespace(request_possible=True),
+            SimpleNamespace(request_possible=False),
+        ]
+        result = request_dialog_suspend(confirmed=True, typed="SUSPEND")
+        self.assertEqual(result.reason, "preflight_changed_or_blocked")
+        run.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

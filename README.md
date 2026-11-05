@@ -116,6 +116,26 @@ These commands only display options and perform a read-only preflight. **No slee
 
 **Manual operation is distinct from automatic ISC modes.** A deliberate manual suspend remains possible in OFF or MONITOR; selecting OFF only disables ISC-initiated **automatic** suspend. ON is still not implemented, and ISC still cannot assert coverage of all background work. The hardware can have resume problems even when the OS accepts a suspend request. Code and CI tests use mocks and never sleep a test machine.
 
+### Optional system-tray icon (GNOME/AppIndicator)
+
+For a status-area menu like Ubuntu top-bar AppIndicator icons, ISC includes an optional **GTK3 + AyatanaAppIndicator** frontend. The CLI remains independent of all graphical libraries. Test local availability without opening the tray or installing anything:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc tray-check
+```
+
+If the diagnostic reports missing bindings, Ubuntu packages commonly include `python3-gi`, `gir1.2-gtk-3.0`, and `gir1.2-ayatanaappindicator3-0.1`. GNOME Shell needs an enabled AppIndicator/KStatusNotifierItem extension for the icon to appear.
+
+To launch in the logged-in graphical session:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc tray
+```
+
+The menu exposes **OFF**, **MONITOR**, a **Sleep / Suspend…** dialog, **Status…**, and **Quit**. ON, Keep Awake, Hibernate and Hybrid Sleep are deliberately **disabled** until implemented. The tray does not launch the background monitoring service: MONITOR currently saves a preference, while `isc serve` must be started separately. It does not autostart at login or change power settings.
+
+Manual Suspend performs a read-only OS preflight, warns about background work and potential display-resume problems, then requires an explicit dialog click **and typing SUSPEND**. It repeats preflight immediately before requesting `systemctl suspend` with inhibitor checks. Merely opening the menu, changing OFF/MONITOR, or opening Status cannot suspend the machine. Actual suspend/resume on the development desktop remains a deliberate user decision.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)

@@ -19,6 +19,7 @@ from .receiver import LocalMonitor, send_observation, send_discovered_observatio
 from .settings import ModeConfigError, read_mode, set_mode
 from .service import MonitorUnavailable, serve_monitor
 from .manual_power import assess_manual_suspend, request_manual_suspend
+from .tray import run_tray, backend_probe
 
 
 def _probe(argv: list[str]) -> str:
@@ -378,7 +379,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check"),
         default="status",
     )
     parser.add_argument(
@@ -392,6 +393,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize one selected hook change")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "tray":
+        return run_tray()
+    if args.command == "tray-check":
+        problems = backend_probe()
+        if problems:
+            print("ISC TRAY DEPENDENCY CHECK")
+            for issue in problems:
+                print("  - " + issue)
+            print("No software or desktop settings changed.")
+            return 2
+        print("ISC tray Python dependencies: AVAILABLE")
+        print("GNOME Shell AppIndicator extension status: NOT VERIFIED")
+        print("No software or desktop settings changed.")
+        return 0
     if args.command in ("power", "sleep", "suspend"):
         return manual_power(
             confirm=args.confirm,

@@ -47,7 +47,8 @@
 - [ ] Trusted agent-origin verification and authenticated process supervision
 - [ ] OpenClaw, Ollama, build/test tools, transfer jobs, backup jobs
 - [ ] Active children and external waits; no idle assumptions from CPU
-- [ ] Optional desktop toggle
+- [x] Optional GTK3/AppIndicator status tray with OFF/MONITOR and guarded manual Suspend (no autostart)
+- [ ] Desktop autostart and live monitoring integrated only after explicit operator opt-in
 
 ## Phase 4 — portability and releases
 

@@ -291,5 +291,19 @@ class CLITests(unittest.TestCase):
         self.assertIn("No suspend request made.", output.getvalue())
 
 
+    @patch("isc.cli.run_tray", return_value=0)
+    def test_tray_cli_is_optional(self, launcher):
+        self.assertEqual(main(["tray"]), 0)
+        launcher.assert_called_once_with()
+
+    @patch("isc.cli.backend_probe", return_value=("graphical_session_unavailable",))
+    def test_tray_check_never_modifies_the_host(self, checker):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["tray-check"]), 2)
+        self.assertIn("graphical_session_unavailable", output.getvalue())
+        self.assertIn("No software or desktop settings changed.", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

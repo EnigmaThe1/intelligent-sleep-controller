@@ -116,9 +116,21 @@ def request_manual_suspend(*, confirmed: bool = False) -> ManualSuspendResult:
         return ManualSuspendResult(False, "cancelled")
     if typed != "SUSPEND":
         return ManualSuspendResult(False, "cancelled")
-    # Recheck right before submitting, with no bypass of systemd inhibitors.
-    final = assess_manual_suspend()
-    if not final.request_possible:
+    return _submit_after_preflight()
+
+
+def request_dialog_suspend(*, confirmed: bool = False, typed: str = "") -> ManualSuspendResult:
+    """Manual GUI action requires an explicit typed phrase and fresh checks."""
+    if not confirmed or typed != "SUSPEND":
+        return ManualSuspendResult(False, "dialog_confirmation_required")
+    if not assess_manual_suspend().request_possible:
+        return ManualSuspendResult(False, "preflight_blocked")
+    return _submit_after_preflight()
+
+
+def _submit_after_preflight() -> ManualSuspendResult:
+    """Last-moment recheck, then request systemd suspend with inhibitors."""
+    if not assess_manual_suspend().request_possible:
         return ManualSuspendResult(False, "preflight_changed_or_blocked")
     try:
         result = subprocess.run(
@@ -132,5 +144,4 @@ def request_manual_suspend(*, confirmed: bool = False) -> ManualSuspendResult:
         return ManualSuspendResult(False, "system_suspend_request_unavailable")
     if result.returncode:
         return ManualSuspendResult(False, "system_suspend_request_rejected")
-    # systemctl is asynchronous: success means request queued, not resumed.
     return ManualSuspendResult(True, "request_accepted_by_systemd")
