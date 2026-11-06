@@ -31,8 +31,7 @@ class LifecycleEvent:
     source: str
     task_id: str
     kind: EventKind
-    """Adapter-confirmed quiescence of *all* child work, not just one child."""
-
+    # Adapter-confirmed quiescence of all child work, not just one child.
     children_quiescent: bool = False
 
 
@@ -110,6 +109,8 @@ _HOOK_EVENTS: dict[tuple[str, str], EventKind] = {
     ("claude_code", "PreToolUse"): EventKind.ACTIVITY,
     ("claude_code", "PostToolUse"): EventKind.ACTIVITY,
     ("claude_code", "PermissionRequest"): EventKind.PERMISSION_REQUESTED,
+    ("claude_code", "SubagentStart"): EventKind.CHILD_STARTED,
+    ("claude_code", "SubagentStop"): EventKind.CHILD_QUIESCED,
     ("claude_code", "Stop"): EventKind.STOPPED,
     ("claude_code", "SessionEnd"): EventKind.STOPPED,
     ("codex", "SessionStart"): EventKind.STOPPED,
@@ -117,6 +118,8 @@ _HOOK_EVENTS: dict[tuple[str, str], EventKind] = {
     ("codex", "PreToolUse"): EventKind.ACTIVITY,
     ("codex", "PostToolUse"): EventKind.ACTIVITY,
     ("codex", "PermissionRequest"): EventKind.PERMISSION_REQUESTED,
+    ("codex", "SubagentStart"): EventKind.CHILD_STARTED,
+    ("codex", "SubagentStop"): EventKind.CHILD_QUIESCED,
     ("codex", "Stop"): EventKind.STOPPED,
     ("codex", "Interrupt"): EventKind.STOPPED,
     ("codex", "SessionEnd"): EventKind.STOPPED,
