@@ -410,10 +410,10 @@ class TrayController:
             )
             monitoring_detail = (
                 f"Receiver health: {health.accepted} accepted / "
-                f"{health.rejected} rejected events\\n"
+                f"{health.rejected} rejected events\n"
                 f"Observed active: {health.observed_active}; "
                 f"waiting-human: {health.observed_waiting_human}; "
-                f"unknown: {health.observed_unknown}\\n"
+                f"unknown: {health.observed_unknown}\n"
                 f"Most recent event: {age}"
             )
         self._notice(
@@ -421,7 +421,8 @@ class TrayController:
             f"Mode preference: {mode}\n"
             f"OS Power Profile: {current_profile}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
-            f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"\n            f"{monitoring_detail}\\n"
+            f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
+            f"{monitoring_detail}\n"
             f"Keep Awake: {'until cancelled' if self._awake.status().requested and self._awake.status().remaining_seconds is None else 'active' if self._awake.status().requested else 'inactive'}\n"
             "Only privacy-limited lifecycle metadata is collected.\n"
             "Full workload coverage is not verified.\n"
