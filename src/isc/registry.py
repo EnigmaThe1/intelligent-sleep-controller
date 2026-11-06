@@ -7,6 +7,7 @@ to disk. A lease expiring never means the workload has completed.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import OrderedDict
 import math
 import re
 
@@ -40,8 +41,9 @@ class WorkRegistry:
     """
 
     def __init__(self) -> None:
-        self._leases: dict[tuple[str, str], TaskLease] = {}
+        self._leases: OrderedDict[tuple[str, str], TaskLease] = OrderedDict()
         self._tracking_history_lost = False
+        self._next_prune_at = 0.0
 
     @property
     def tracking_history_lost(self) -> bool:
@@ -50,6 +52,9 @@ class WorkRegistry:
 
     def _prune(self, now: float) -> None:
         """Bound memory without ever treating an evicted lease as completed."""
+        if now < self._next_prune_at:
+            return
+        self._next_prune_at = now + 15.0
         expired = [
             key for key, lease in self._leases.items()
             if now >= lease.expires_at + STALE_RETENTION_SECONDS
@@ -62,12 +67,9 @@ class WorkRegistry:
     def _make_room(self) -> None:
         if len(self._leases) < MAX_RETAINED_LEASES:
             return
-        # Oldest expiry first, but never imply the evicted task finished.
-        victim = min(
-            self._leases,
-            key=lambda key: (self._leases[key].expires_at, key),
-        )
-        del self._leases[victim]
+        # Evict the least recently refreshed observation in O(1) time.
+        # Neither disappearance nor eviction ever means work completed.
+        self._leases.popitem(last=False)
         self._tracking_history_lost = True
 
     def observed_child_work(self, source: str, task_id: str) -> bool:
@@ -117,6 +119,7 @@ class WorkRegistry:
             observed_at=float(now),
             expires_at=float(now + ttl_seconds),
         )
+        self._leases.move_to_end(key)
 
     def observed_work(self, *, now: float) -> tuple[WorkItem, ...]:
         """Return all observed tasks; expired or time-reversed become UNKNOWN."""
