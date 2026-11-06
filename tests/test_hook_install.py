@@ -69,6 +69,34 @@ class HookInstallTests(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(changed, self.original)
 
+    def test_legacy_command_without_async_does_not_duplicate(self):
+        legacy = {"hooks": {
+            event: [{"hooks": [
+                {"type": "command", "command": hook_command("claude_code")}
+            ]}] for event in EVENTS
+        }}
+        updated, count = transform_hooks(legacy, "claude_code", "enable")
+        self.assertEqual(count, 0)
+        self.assertEqual(updated, legacy)
+        clean, removed = transform_hooks(legacy, "claude_code", "disable")
+        self.assertEqual(removed, len(EVENTS))
+        self.assertEqual(clean["hooks"], {})
+
+    def test_isc_hook_in_mixed_group_removes_only_isc_handler(self):
+        external = {"type": "command", "command": "EXTERNAL_UNRELATED"}
+        own = {"type": "command", "command": hook_command("codex")}
+        data = {"hooks": {
+            "Stop": [{"matcher": "existing", "hooks": [external, own]}],
+        }}
+        same, added = transform_hooks(data, "codex", "enable")
+        self.assertEqual(added, 7)
+        self.assertEqual(same["hooks"]["Stop"], data["hooks"]["Stop"])
+        removed, count = transform_hooks(data, "codex", "disable")
+        self.assertEqual(count, 1)
+        self.assertEqual(removed["hooks"]["Stop"], [
+            {"matcher": "existing", "hooks": [external]}
+        ])
+
     def test_codex_session_end_is_sync_others_async(self):
         self.assertNotIn("async", owned_group("codex", "SessionEnd")["hooks"][0])
         self.assertTrue(owned_group("codex", "PreToolUse")["hooks"][0]["async"])
