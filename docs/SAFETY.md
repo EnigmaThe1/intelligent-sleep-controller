@@ -108,3 +108,26 @@ partial (same-user and selected process roots only), and a missing child
 must not imply that no work remains. Process diagnostics must never read
 environment variables, command arguments, private files, or network
 payloads. All process observations remain untrusted for enabling ON.
+
+## Reliability hardening boundaries
+
+Registry and event-count storage must have bounded cardinality under arbitrary
+same-user events. Any evicted or expired task record must leave a persistent
+UNKNOWN tracking-loss signal until a trusted full resynchronisation is
+implemented. A monitor with lost history cannot prove that a task completed.
+
+Each socket connection is time-bounded independently of the incoming byte
+rate. Unknown event names occupy a fixed counter bucket rather than
+creating one key per attacker-controlled event. Unexpected socket errors
+must never trigger suspend or mark workloads safe.
+
+Recognising prior ISC-owned user services and autostart files requires
+complete canonical structure validation, not merely a matching label.
+Foreign files may not be modified or removed. After a path move, disabling
+a verified legacy ISC entry is permitted, but enabling a stale entry must
+require a deliberate migration first.
+
+A SubagentStop observation is not proof that all children have finished.
+Observed child activity remains unresolved until a trusted supervisor
+can verify it. Linux process names that cannot be decoded must be reported
+as incomplete visibility and never treated as proof of an idle machine.
