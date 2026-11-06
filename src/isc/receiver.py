@@ -360,7 +360,11 @@ class LocalMonitor:
         self.close()
 
     def _handle_one(self) -> None:
-        connection, _ = self._listener.accept()
+        try:
+            connection, _ = self._listener.accept()
+        except OSError:
+            self.rejected += 1
+            return
         with connection:
             deadline = time.monotonic() + MAX_CONNECTION_SECONDS
             try:
