@@ -15,6 +15,8 @@ from .policy import WorkItem, WorkState
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z", re.ASCII)
 _MAX_TTL_SECONDS = 3600.0
+MAX_RETAINED_LEASES = 4096
+STALE_RETENTION_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,34 @@ class WorkRegistry:
 
     def __init__(self) -> None:
         self._leases: dict[tuple[str, str], TaskLease] = {}
+        self._tracking_history_lost = False
+
+    @property
+    def tracking_history_lost(self) -> bool:
+        """Loss of historical observations is sticky until service restart."""
+        return self._tracking_history_lost
+
+    def _prune(self, now: float) -> None:
+        """Bound memory without ever treating an evicted lease as completed."""
+        expired = [
+            key for key, lease in self._leases.items()
+            if now >= lease.expires_at + STALE_RETENTION_SECONDS
+        ]
+        for key in expired:
+            del self._leases[key]
+        if expired:
+            self._tracking_history_lost = True
+
+    def _make_room(self) -> None:
+        if len(self._leases) < MAX_RETAINED_LEASES:
+            return
+        # Oldest expiry first, but never imply the evicted task finished.
+        victim = min(
+            self._leases,
+            key=lambda key: (self._leases[key].expires_at, key),
+        )
+        del self._leases[victim]
+        self._tracking_history_lost = True
 
     def report(
         self,
@@ -67,10 +97,13 @@ class WorkRegistry:
             or not 0 < ttl_seconds <= _MAX_TTL_SECONDS
         ):
             raise ValueError("invalid_lease_ttl")
+        self._prune(float(now))
         key = (source, task_id)
         previous = self._leases.get(key)
         if previous is not None and now < previous.observed_at:
             raise ValueError("out_of_order_event")
+        if previous is None:
+            self._make_room()
         self._leases[key] = TaskLease(
             source=source,
             task_id=task_id,
@@ -84,7 +117,12 @@ class WorkRegistry:
         """Return all observed tasks; expired or time-reversed become UNKNOWN."""
         if not isinstance(now, (int, float)) or not math.isfinite(now) or now < 0:
             raise ValueError("invalid_monotonic_time")
+        self._prune(float(now))
         result: list[WorkItem] = []
+        if self._tracking_history_lost:
+            # A sticky UNKNOWN sentinel prevents lost evidence from becoming
+            # an apparently empty (and therefore safe) workload inventory.
+            result.append(WorkItem("isc:tracking_history_lost", WorkState.UNKNOWN))
         for key, lease in sorted(self._leases.items()):
             stale = now < lease.observed_at or now >= lease.expires_at
             result.append(
