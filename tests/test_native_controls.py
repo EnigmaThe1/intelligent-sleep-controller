@@ -122,5 +122,19 @@ class NativeControlsTests(unittest.TestCase):
         spawn.assert_not_called()
 
 
+    @patch.dict(os.environ, {
+        "PATH": "/usr/bin", "AGENT_SECRET_TOKEN": "PRIVATE_VALUE",
+    })
+    @patch("isc.native_controls.subprocess.run")
+    def test_profile_probe_does_not_forward_agent_tokens(self, run):
+        run.return_value = SimpleNamespace(returncode=0, stdout="")
+        from isc.native_controls import _run
+        _run(["powerprofilesctl", "get"])
+        env = run.call_args.kwargs["env"]
+        self.assertEqual(env["PATH"], "/usr/bin")
+        self.assertNotIn("AGENT_SECRET_TOKEN", env)
+        self.assertNotIn("PRIVATE_VALUE", str(env))
+
+
 if __name__ == "__main__":
     unittest.main()
