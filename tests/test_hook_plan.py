@@ -57,6 +57,21 @@ class HookPlanTests(unittest.TestCase):
         self.assertNotIn("Stop", plan.proposed_events)
         self.assertEqual(len(plan.proposed_events), len(EVENTS) - 1)
 
+    def test_plan_matches_installer_for_legacy_isc_async_variants(self):
+        from isc.hook_install import transform_hooks
+        legacy = {"hooks": {
+            event: [{"hooks": [
+                {"type": "command", "command": hook_command("claude_code")}
+            ]}] for event in EVENTS
+        }}
+        self.write(legacy)
+        plan = build_hook_plan("claude_code", self.path)
+        self.assertEqual(len(plan.already_installed), len(EVENTS))
+        self.assertEqual(plan.proposed_events, ())
+        updated, count = transform_hooks(legacy, "claude_code", "enable")
+        self.assertEqual(count, 0)
+        self.assertEqual(updated, legacy)
+
     def test_same_command_for_different_source_is_not_duplicate(self):
         self.write({"hooks": {"Stop": [{
             "hooks": [{
