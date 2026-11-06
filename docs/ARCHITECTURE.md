@@ -273,3 +273,18 @@ same-user hook senders and **are not authenticated as third-party application
 origins**. Old health messages remain readable with unknown per-source
 counts until the receiver is restarted. None of these counters qualifies
 the autonomous eligibility gate.
+
+## Partial Linux process identity observation (MONITOR)
+
+The `process-watch` diagnostic reads only bounded `/proc/PID/stat` data
+for processes owned by the current user and searches for selected process
+names, then recursively includes visible same-user descendants. Process
+identity uses PID + kernel start ticks, not PID alone. A separate snapshot
+comparison reports appearance, continuity, disappearance and PID reuse.
+
+This observation cannot establish process success, exact application intent,
+all subprocesses, remote work, cross-user processes, or complete sleep
+eligibility. A vanished process is NOT a completed application task and an
+empty snapshot is NOT proof of safety. No asynchronous watcher is installed
+by this diagnostic. It does not register authoritative completion or change
+systemd, GNOME, suspend settings or ISC mode.
