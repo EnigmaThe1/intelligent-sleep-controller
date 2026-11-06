@@ -404,12 +404,21 @@ class LocalMonitor:
                     self._synthetic_probe_events += 1
                     self.accepted += 1
                     return
-                state = interpret(
+                decision = interpret(
                     hook_observation(source, event_name, session_fingerprint)
-                ).state
+                )
+                state = decision.state
+                # SubagentStop does not prove all children finished.
+                # Retain the observed child flag for the session until its
+                # lease ages out; loss is separately tracked as UNKNOWN.
+                active_children = (
+                    decision.active_children
+                    or self.registry.observed_child_work(source, session_fingerprint)
+                )
                 self.registry.report(
                     source, session_fingerprint, state,
-                    now=time.monotonic(), ttl_seconds=30.0
+                    now=time.monotonic(), ttl_seconds=30.0,
+                    active_children=active_children,
                 )
                 self.counts[state.value] += 1
                 # Unknown vendor events share a fixed bucket, so a same-UID
