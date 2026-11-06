@@ -44,5 +44,107 @@ class TrayTests(unittest.TestCase):
         dep.assert_not_called()
 
 
+class _ProfileItemFake:
+    def __init__(self, label):
+        self._label = label
+        self._visible = True
+        self._sensitive = True
+        self.label_changes = 0
+        self.visibility_changes = 0
+
+    def get_label(self):
+        return self._label
+
+    def set_label(self, label):
+        self._label = label
+        self.label_changes += 1
+
+    def get_visible(self):
+        return self._visible
+
+    def set_visible(self, enabled):
+        self._visible = enabled
+        self.visibility_changes += 1
+
+    def set_sensitive(self, value):
+        self._sensitive = value
+
+
+class ProfileSubmenuRegressionTests(unittest.TestCase):
+    def _controller(self):
+        from isc.tray import TrayController
+        controller = object.__new__(TrayController)
+        controller.profiles_item = _ProfileItemFake("Power Profile")
+        controller._profile_items = {
+            name: _ProfileItemFake(name)
+            for name in ("power-saver", "balanced", "performance")
+        }
+        controller._profile_unavailable = _ProfileItemFake("unavailable")
+        return controller
+
+    @patch("isc.tray.power_profiles")
+    def test_refresh_updates_existing_items_without_recreating_them(self, read):
+        from isc.native_controls import PowerProfiles
+        c = self._controller()
+        original_ids = tuple(id(x) for x in c._profile_items.values())
+        read.return_value = PowerProfiles(
+            "performance", ("power-saver", "balanced", "performance"),
+        )
+        c._refresh_profiles()
+        self.assertEqual(
+            c.profiles_item.get_label(), "Power Profile: performance",
+        )
+        self.assertEqual(
+            c._profile_items["performance"].get_label(), "● Performance",
+        )
+        self.assertFalse(c._profile_unavailable.get_visible())
+
+        # Re-querying while the submenu is open must not change the widgets
+        # or even trigger unnecessary labels/visibility updates.
+        labels_before = {
+            k: v.label_changes for k, v in c._profile_items.items()
+        }
+        visibility_before = {
+            k: v.visibility_changes for k, v in c._profile_items.items()
+        }
+        c._refresh_profiles()
+        self.assertEqual(tuple(id(x) for x in c._profile_items.values()), original_ids)
+        self.assertEqual(
+            {k: v.label_changes for k, v in c._profile_items.items()},
+            labels_before,
+        )
+        self.assertEqual(
+            {k: v.visibility_changes for k, v in c._profile_items.items()},
+            visibility_before,
+        )
+
+    @patch("isc.tray.power_profiles")
+    def test_host_profile_changes_do_not_rebuild_submenu(self, read):
+        from isc.native_controls import PowerProfiles
+        c = self._controller()
+        ids = tuple(id(x) for x in c._profile_items.values())
+        read.side_effect = [
+            PowerProfiles("performance", ("power-saver", "balanced", "performance")),
+            PowerProfiles("balanced", ("power-saver", "balanced")),
+        ]
+        c._refresh_profiles()
+        c._refresh_profiles()
+        self.assertEqual(ids, tuple(id(x) for x in c._profile_items.values()))
+        self.assertFalse(c._profile_items["performance"].get_visible())
+        self.assertEqual(c._profile_items["balanced"].get_label(), "● Balanced")
+        self.assertTrue(c._profile_items["balanced"].get_visible())
+
+    @patch("isc.tray.power_profiles")
+    def test_unavailable_daemon_reports_status_without_rebuilding(self, read):
+        from isc.native_controls import NativeControlError
+        c = self._controller()
+        read.side_effect = NativeControlError("not_found")
+        c._refresh_profiles()
+        self.assertEqual(c.profiles_item.get_label(), "Power Profile: unavailable")
+        self.assertTrue(c._profile_unavailable.get_visible())
+        self.assertTrue(all(not x.get_visible() for x in c._profile_items.values()))
+
+
+
 if __name__ == "__main__":
     unittest.main()
