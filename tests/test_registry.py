@@ -154,6 +154,47 @@ class RegistryTests(unittest.TestCase):
         ))
         self.assertFalse(verdict.eligible)
 
+    def test_stale_records_eventually_pruned_but_never_report_completed(self):
+        from isc.registry import STALE_RETENTION_SECONDS
+        reg = WorkRegistry()
+        reg.report("claude_code", "old", WorkState.ACTIVE, now=1, ttl_seconds=1)
+        self.assertEqual(reg.count(), 1)
+        observed = reg.observed_work(now=2)
+        self.assertEqual(observed[0].state, WorkState.UNKNOWN)
+        observed = reg.observed_work(now=2 + STALE_RETENTION_SECONDS)
+        self.assertEqual(reg.count(), 0)
+        self.assertTrue(reg.tracking_history_lost)
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0].state, WorkState.UNKNOWN)
+        self.assertEqual(observed[0].identifier, "isc:tracking_history_lost")
+
+    def test_registry_capacity_bound_never_discards_loss_signal(self):
+        from isc.registry import MAX_RETAINED_LEASES
+        reg = WorkRegistry()
+        for n in range(MAX_RETAINED_LEASES + 50):
+            reg.report(
+                "claude_code", f"session-{n}", WorkState.ACTIVE,
+                now=1, ttl_seconds=30,
+            )
+        self.assertEqual(reg.count(), MAX_RETAINED_LEASES)
+        self.assertTrue(reg.tracking_history_lost)
+        states = reg.observed_work(now=2)
+        self.assertEqual(len(states), MAX_RETAINED_LEASES + 1)
+        self.assertEqual(states[0].state, WorkState.UNKNOWN)
+        self.assertEqual(reg.count(), MAX_RETAINED_LEASES)
+
+    def test_registry_refresh_does_not_overwrite_or_evict_unrelated_work(self):
+        from isc.registry import MAX_RETAINED_LEASES
+        reg = WorkRegistry()
+        reg.report("claude_code", "stable", WorkState.ACTIVE, now=1, ttl_seconds=500)
+        reg.report("codex", "other", WorkState.ACTIVE, now=1, ttl_seconds=500)
+        for i in range(10):
+            reg.report("claude_code", "stable", WorkState.ACTIVE,
+                       now=2+i, ttl_seconds=500)
+        self.assertEqual(reg.count(), 2)
+        self.assertFalse(reg.tracking_history_lost)
+
+
 
 if __name__ == "__main__":
     unittest.main()
