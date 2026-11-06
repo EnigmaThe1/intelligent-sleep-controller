@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import os
 
 from .manual_power import assess_manual_suspend, request_dialog_suspend
-from .receiver import discover_monitor_socket
+from .receiver import discover_monitor_socket, read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
 from .tray_runtime import TrayMonitorProcess
 from .tray_singleton import TrayAlreadyRunning, TrayLockUnavailable, single_tray_instance
@@ -399,12 +399,29 @@ class TrayController:
             current_profile = power_profiles().current
         except NativeControlError:
             current_profile = "unavailable"
+        health = read_monitor_health()
+        if health is None:
+            monitoring_detail = "Receiver health: unavailable"
+        else:
+            age = (
+                f"{health.last_event_age_seconds}s ago"
+                if health.last_event_age_seconds is not None
+                else "no events observed"
+            )
+            monitoring_detail = (
+                f"Receiver health: {health.accepted} accepted / "
+                f"{health.rejected} rejected events\\n"
+                f"Observed active: {health.observed_active}; "
+                f"waiting-human: {health.observed_waiting_human}; "
+                f"unknown: {health.observed_unknown}\\n"
+                f"Most recent event: {age}"
+            )
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
             f"OS Power Profile: {current_profile}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
-            f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
+            f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"\n            f"{monitoring_detail}\\n"
             f"Keep Awake: {'until cancelled' if self._awake.status().requested and self._awake.status().remaining_seconds is None else 'active' if self._awake.status().requested else 'inactive'}\n"
             "Only privacy-limited lifecycle metadata is collected.\n"
             "Full workload coverage is not verified.\n"
