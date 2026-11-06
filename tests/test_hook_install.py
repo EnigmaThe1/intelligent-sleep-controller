@@ -82,6 +82,40 @@ class HookInstallTests(unittest.TestCase):
         self.assertEqual(removed, len(EVENTS))
         self.assertEqual(clean["hooks"], {})
 
+    def test_interpreter_relocation_does_not_duplicate_legacy_hook(self):
+        import shlex
+        old_command = (
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/srv/old-isc/src "
+            "/opt/old-python/bin/python3 -m isc send-hook --source claude_code"
+        )
+        legacy = {"hooks": {
+            "Stop": [{"hooks": [
+                {"type": "command", "command": old_command}
+            ]}],
+        }}
+        renewed, added = transform_hooks(legacy, "claude_code", "enable")
+        self.assertEqual(added, len(EVENTS) - 1)
+        self.assertEqual(renewed["hooks"]["Stop"], legacy["hooks"]["Stop"])
+        cleaned, removed = transform_hooks(legacy, "claude_code", "disable")
+        self.assertEqual(removed, 1)
+        self.assertEqual(cleaned["hooks"], {})
+
+    def test_shell_injection_like_imitation_is_not_treated_as_isc_owned(self):
+        variants = [
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/tmp/thing;evil "
+            "/usr/bin/python3 -m isc send-hook --source codex",
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/tmp/thing "
+            "/usr/bin/python3 -m isc send-hook --source codex && other",
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/tmp/thing "
+            "/usr/bin/python3 -m isc send-hook --source claude_code",
+        ]
+        from isc.hook_plan import is_isc_handler
+        for cmd in variants:
+            with self.subTest(cmd=cmd):
+                self.assertFalse(is_isc_handler({
+                    "type": "command", "command": cmd,
+                }, "codex"))
+
     def test_isc_hook_in_mixed_group_removes_only_isc_handler(self):
         external = {"type": "command", "command": "EXTERNAL_UNRELATED"}
         own = {"type": "command", "command": hook_command("codex")}
