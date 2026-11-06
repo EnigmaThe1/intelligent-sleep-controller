@@ -114,7 +114,23 @@ class TrayController:
         self.profiles_item = Gtk.MenuItem.new_with_label("Power Profile")
         self.profiles_menu = Gtk.Menu()
         self.profiles_item.set_submenu(self.profiles_menu)
-        self.profiles_menu.connect("show", self._refresh_profiles)
+        # Build the submenu once. Removing/recreating its children in GTK's
+        # "show" signal makes the AppIndicator submenu collapse immediately.
+        self._profile_items = {}
+        for profile, label in (
+            ("power-saver", "Energy Saver"),
+            ("balanced", "Balanced"),
+            ("performance", "Performance"),
+        ):
+            item = Gtk.MenuItem.new_with_label(label)
+            item.connect("activate", self._select_profile, profile)
+            self.profiles_menu.append(item)
+            self._profile_items[profile] = item
+        self._profile_unavailable = Gtk.MenuItem.new_with_label(
+            "OS power-profile service unavailable"
+        )
+        self._profile_unavailable.set_sensitive(False)
+        self.profiles_menu.append(self._profile_unavailable)
         self.menu.append(self.profiles_item)
         self._item("Open System Power Settings…", self._open_system_power)
         self._separator()
@@ -208,6 +224,7 @@ class TrayController:
             self.receiver_label.set_label(
                 state_labels.get(self._monitor_state, "Monitoring: unknown")
             )
+            self._refresh_profiles()
             awake = self._awake.status()
             self.awake_label.set_label(
                 (
@@ -220,32 +237,40 @@ class TrayController:
             self._refreshing = False
         return True
 
-    def _refresh_profiles(self, _widget):
-        for item in self.profiles_menu.get_children():
-            self.profiles_menu.remove(item)
+    def _refresh_profiles(self):
+        """Update existing items only; never rebuild a visible GTK submenu."""
         try:
             state = power_profiles()
-            self.profiles_item.set_label("Power Profile: " + state.current)
-            labels = {
-                "power-saver": "Energy Saver",
-                "balanced": "Balanced",
-                "performance": "Performance",
-            }
-            for profile in state.available:
-                prefix = "● " if state.current == profile else "   "
-                item = self.Gtk.MenuItem.new_with_label(
-                    prefix + labels.get(profile, profile)
-                )
-                item.connect("activate", self._select_profile, profile)
-                self.profiles_menu.append(item)
         except NativeControlError:
-            self.profiles_item.set_label("Power Profile: unavailable")
-            item = self.Gtk.MenuItem.new_with_label(
-                "OS power-profile service unavailable"
-            )
-            item.set_sensitive(False)
-            self.profiles_menu.append(item)
-        self.profiles_menu.show_all()
+            self._set_profile_parent_label("Power Profile: unavailable")
+            for item in self._profile_items.values():
+                self._set_profile_item_visible(item, False)
+            self._set_profile_item_visible(self._profile_unavailable, True)
+            return
+
+        self._set_profile_parent_label("Power Profile: " + state.current)
+        self._set_profile_item_visible(self._profile_unavailable, False)
+        names = {
+            "power-saver": "Energy Saver",
+            "balanced": "Balanced",
+            "performance": "Performance",
+        }
+        for profile, item in self._profile_items.items():
+            self._set_profile_item_visible(item, profile in state.available)
+            label = ("● " if state.current == profile else "   ") + names[profile]
+            # Calling Gtk.set_label for unchanged text can trigger a relayout
+            # while the pointer is entering an AppIndicator submenu.
+            if item.get_label() != label:
+                item.set_label(label)
+
+    def _set_profile_parent_label(self, label):
+        if self.profiles_item.get_label() != label:
+            self.profiles_item.set_label(label)
+
+    @staticmethod
+    def _set_profile_item_visible(item, visible):
+        if item.get_visible() != visible:
+            item.set_visible(visible)
 
     def _select_profile(self, _item, profile):
         try:
@@ -254,6 +279,7 @@ class TrayController:
             self._notice(
                 "Power profile unavailable", str(exc), error=True,
             )
+        self._refresh_profiles()
 
     def _open_system_power(self, _item):
         try:
