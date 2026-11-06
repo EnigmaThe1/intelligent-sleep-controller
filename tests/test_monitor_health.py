@@ -51,6 +51,9 @@ class MonitorHealthTests(unittest.TestCase):
                     self.assertIsNotNone(response)
                     self.assertEqual(response.accepted, 1)
                     self.assertEqual(response.observed_active, 1)
+                    self.assertEqual(response.claude_code_observations, 1)
+                    self.assertEqual(response.codex_observations, 0)
+                    self.assertEqual(response.synthetic_probe_events, 0)
                     self.assertEqual(response.observed_unknown, 0)
                     self.assertEqual(response.last_event_age_seconds, 0)
                     self.assertFalse(response.coverage_verified)
@@ -79,6 +82,86 @@ class MonitorHealthTests(unittest.TestCase):
                 sent = json.loads(connection.sendall.call_args.args[0])
                 self.assertEqual(sent["observed_unknown"], 1)
                 self.assertFalse(sent["coverage_verified"])
+
+
+    def test_source_claims_separate_from_synthetic_diagnostics(self):
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp, advertise=True) as monitor:
+                worker = threading.Thread(target=monitor.run_for, args=(1.0,))
+                worker.start()
+                try:
+                    for source, event in (
+                        ("claude_code", "PreToolUse"),
+                        ("codex", "PostToolUse"),
+                        ("claude_code", "IscSelfTest"),
+                    ):
+                        observation = parse_hook_payload(source, json.dumps({
+                            "session_id": "private-session-" + source + event,
+                            "hook_event_name": event,
+                            "secret": "never-expose-me",
+                        }).encode())
+                        self.assertIsNotNone(observation)
+                        self.assertTrue(send_observation(monitor.path, observation))
+                    deadline = time.monotonic() + 0.7
+                    health = None
+                    while time.monotonic() < deadline:
+                        health = read_monitor_health(runtime_dir=tmp)
+                        if health is not None and health.accepted >= 3:
+                            break
+                        time.sleep(0.02)
+                    self.assertIsNotNone(health)
+                    self.assertEqual(health.accepted, 3)
+                    self.assertEqual(health.claude_code_observations, 1)
+                    self.assertEqual(health.codex_observations, 1)
+                    self.assertEqual(health.synthetic_probe_events, 1)
+                    self.assertEqual(monitor.registry.count(), 2)
+                    self.assertFalse(health.coverage_verified)
+                    self.assertNotIn("never-expose-me", str(health))
+                    self.assertNotIn("private-session", str(health))
+                finally:
+                    worker.join(timeout=2)
+                    self.assertFalse(worker.is_alive())
+
+    def test_legacy_running_receiver_is_readable_but_source_is_unknown(self):
+        from unittest.mock import MagicMock, patch
+        from isc.receiver import read_monitor_health
+        original = {
+            "accepted": 1, "rejected": 0, "observed_active": 0,
+            "observed_waiting_human": 0, "observed_unknown": 1,
+            "last_event_age_seconds": 2, "coverage_verified": False,
+        }
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        conn.recv.side_effect = [json.dumps(original).encode(), b""]
+        with patch("isc.receiver.discover_monitor_socket",
+                   return_value=Path("/private/isc-monitor/events.sock")):
+            with patch("isc.receiver.socket.socket", return_value=conn):
+                health = read_monitor_health()
+        self.assertIsNotNone(health)
+        self.assertEqual(health.accepted, 1)
+        self.assertIsNone(health.claude_code_observations)
+        self.assertIsNone(health.codex_observations)
+        self.assertIsNone(health.synthetic_probe_events)
+        self.assertFalse(health.coverage_verified)
+
+    def test_inconsistent_extended_receiver_counters_rejected(self):
+        from unittest.mock import MagicMock, patch
+        from isc.receiver import read_monitor_health
+        raw = {
+            "accepted": 1, "rejected": 0, "observed_active": 0,
+            "observed_waiting_human": 0, "observed_unknown": 0,
+            "last_event_age_seconds": None, "coverage_verified": False,
+            "claude_code_observations": 1,
+            "codex_observations": 1,
+            "synthetic_probe_events": 0,
+        }
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        conn.recv.side_effect = [json.dumps(raw).encode(), b""]
+        with patch("isc.receiver.discover_monitor_socket",
+                   return_value=Path("/private/isc-monitor/events.sock")):
+            with patch("isc.receiver.socket.socket", return_value=conn):
+                self.assertIsNone(read_monitor_health())
 
 
 if __name__ == "__main__":
