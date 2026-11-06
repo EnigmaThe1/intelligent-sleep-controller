@@ -69,11 +69,13 @@ class MonitorHealthTests(unittest.TestCase):
                     "claude_code", "opaque", __import__(
                         "isc.policy", fromlist=["WorkState"]
                     ).WorkState.ACTIVE,
-                    now=time.monotonic() - 20, ttl_seconds=1,
+                    now=1.0, ttl_seconds=1,
                 )
                 from unittest.mock import Mock
                 connection = Mock()
-                monitor._reply_health(connection)
+                from unittest.mock import patch
+                with patch("isc.receiver.time.monotonic", return_value=100.0):
+                    monitor._reply_health(connection)
                 sent = json.loads(connection.sendall.call_args.args[0])
                 self.assertEqual(sent["observed_unknown"], 1)
                 self.assertFalse(sent["coverage_verified"])
