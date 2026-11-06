@@ -12,7 +12,8 @@ license = {file = "LICENSE"}
 dependencies = []
 
 [project.scripts]
-smart-sleep = "isc.cli:main"
+isc = "isc.cli:main"
+smart-sleep = "isc.cli:main"  # backward-compatible alias
 
 [tool.setuptools.packages.find]
 where = ["src"]
