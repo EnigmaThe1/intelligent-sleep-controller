@@ -97,6 +97,48 @@ class UserServiceTests(unittest.TestCase):
         run.assert_not_called()
 
     @patch("isc.user_service._run_systemd", return_value=True)
+    def test_legacy_isc_unit_with_moved_python_still_disables(self, systemd):
+        self.unit.parent.mkdir(parents=True, mode=0o700)
+        (self.root / "systemd").chmod(0o700)
+        self.unit.parent.chmod(0o700)
+        previous = unit_contents(
+            interpreter="/opt/old-venv/bin/python3",
+            source_root="/srv/old-isc-location/src",
+        )
+        self.unit.write_bytes(previous)
+        self.unit.chmod(0o600)
+        inspected = inspect_user_service(config_root=self.root, live=False)
+        self.assertTrue(inspected.installed)
+        with self.assertRaisesRegex(
+            UserServiceError, "service_path_migration_requires_disable_first",
+        ):
+            modify_user_service("enable", config_root=self.root)
+        self.assertEqual(self.unit.read_bytes(), previous)
+        modified = modify_user_service("disable", config_root=self.root)
+        self.assertFalse(modified.installed)
+        self.assertFalse(self.unit.exists())
+        self.assertIn(("disable", "--now", UNIT_NAME),
+                      [call.args for call in systemd.call_args_list])
+
+    @patch("isc.user_service._run_systemd")
+    def test_service_imitation_with_changed_structure_is_never_owned(
+        self, systemd,
+    ):
+        self.unit.parent.mkdir(parents=True, mode=0o700)
+        (self.root / "systemd").chmod(0o700)
+        self.unit.parent.chmod(0o700)
+        body = unit_contents(
+            interpreter="/opt/old-venv/bin/python3",
+            source_root="/srv/old-isc-location/src",
+        ).replace(b"NoNewPrivileges=yes", b"NoNewPrivileges=no")
+        self.unit.write_bytes(body)
+        self.unit.chmod(0o600)
+        with self.assertRaisesRegex(UserServiceError, "foreign_or_modified"):
+            modify_user_service("disable", config_root=self.root)
+        self.assertEqual(self.unit.read_bytes(), body)
+        systemd.assert_not_called()
+
+    @patch("isc.user_service._run_systemd", return_value=True)
     def test_explicit_enable_and_disable_touch_only_owned_unit(self, run):
         status = modify_user_service("enable", config_root=self.root)
         self.assertTrue(status.installed)
