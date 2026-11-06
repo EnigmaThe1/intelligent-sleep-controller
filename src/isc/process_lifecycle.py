@@ -18,7 +18,7 @@ import re
 
 from .processes import DEFAULT_CANDIDATE_NAMES
 
-_COMM = re.compile(r"[^\\x00-\\x1f\\x7f]{1,15}\\Z")
+_COMM = re.compile(r"[^\x00-\x1f\x7f]{1,15}\Z")
 _MAX_CENSUS = 16384
 _MAX_STAT_BYTES = 4096
 
@@ -64,7 +64,7 @@ def parse_proc_stat(raw: str, expected_pid: int) -> ProcessIdentity | None:
     if (
         type(expected_pid) is not int or expected_pid <= 0
         or not isinstance(raw, str) or len(raw.encode("utf-8")) > _MAX_STAT_BYTES
-        or "\\n" in raw[:-1] or "\\x00" in raw
+        or "\n" in raw[:-1] or "\x00" in raw
     ):
         return None
     prefix = f"{expected_pid} ("
