@@ -307,13 +307,24 @@ class ReceiverTests(unittest.TestCase):
         with LocalMonitor(runtime_dir=self.base) as server:
             slow = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             slow.connect(str(server.path))
-            slow.sendall(b" ")
+            def drip():
+                end = time.monotonic() + MAX_CONNECTION_SECONDS + 0.7
+                try:
+                    while time.monotonic() < end:
+                        slow.sendall(b" ")
+                        time.sleep(0.09)
+                except (BrokenPipeError, ConnectionResetError, OSError):
+                    pass
+                finally:
+                    slow.close()
+            sender = threading.Thread(target=drip, daemon=True)
+            sender.start()
             start = time.monotonic()
-            try:
-                server.run_for(MAX_CONNECTION_SECONDS + 0.35)
-            finally:
-                slow.close()
-            self.assertLess(time.monotonic() - start, MAX_CONNECTION_SECONDS + 0.7)
+            server._handle_one()
+            elapsed = time.monotonic() - start
+            sender.join(timeout=3)
+            self.assertFalse(sender.is_alive())
+            self.assertLess(elapsed, MAX_CONNECTION_SECONDS + 0.25)
             self.assertEqual(server.accepted, 0)
             self.assertGreaterEqual(server.rejected, 1)
 
