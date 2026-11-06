@@ -84,6 +84,17 @@ class ProcessTests(unittest.TestCase):
         self.add(101, "bad\x00name\n")
         self.assertIsNone(self.scan())
 
+    def test_invalid_utf8_comm_is_reported_as_partial_visibility(self):
+        self.add(100, "claude\n")
+        bad = self.root / "101"
+        bad.mkdir()
+        (bad / "comm").write_bytes(bytes([255, 254, 10]))
+        result = self.scan()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.count, 1)
+        self.assertEqual(result.candidates[0].name, "claude")
+        self.assertEqual(result.undecodable_names, 1)
+
     def test_invalid_names_and_uid_fail_closed(self):
         self.assertIsNone(read_process_candidates(proc_root=self.root, uid=-1))
         self.assertIsNone(self.scan(names=frozenset({"bad\nname"})))
