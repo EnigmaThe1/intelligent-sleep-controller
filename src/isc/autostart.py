@@ -78,6 +78,34 @@ def desktop_contents(
     return document.encode("utf-8")
 
 
+def _is_isc_desktop(raw: bytes) -> bool:
+    """Match the entire ISC desktop entry, including historical paths.
+
+    The filename or display Name alone must never imply ownership.
+    """
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError:
+        return False
+    match_try = re.search(r"(?m)^TryExec=(/[A-Za-z0-9_/.-]+)$", text)
+    match_exec = re.search(
+        r"(?m)^Exec=/usr/bin/env PYTHONDONTWRITEBYTECODE=1 "
+        r"PYTHONPATH=(/[A-Za-z0-9_/.-]+) "
+        r"(/[A-Za-z0-9_/.-]+) -B -m isc tray$", text,
+    )
+    if match_try is None or match_exec is None:
+        return False
+    if match_try.group(1) != match_exec.group(2):
+        return False
+    try:
+        return raw == desktop_contents(
+            interpreter=match_try.group(1),
+            source_root=match_exec.group(1),
+        )
+    except AutostartError:
+        return False
+
+
 def _existing_bytes(path: Path) -> bytes:
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -132,7 +160,7 @@ def inspect_autostart(*, config_root: str | Path | None = None) -> AutostartStat
         raise AutostartError("autostart_file_unavailable") from None
     raw = _existing_bytes(target)
     return AutostartStatus(
-        "enabled" if raw == desktop_contents() else "unmanaged"
+        "enabled" if _is_isc_desktop(raw) else "unmanaged"
     )
 
 
@@ -151,7 +179,7 @@ def modify_autostart(
             return AutostartStatus("disabled")
         parent = root / "autostart"
         target = parent / DESKTOP_NAME
-        if _existing_bytes(target) != desktop_contents():
+        if not _is_isc_desktop(_existing_bytes(target)):
             raise AutostartError("startup_entry_changed")
         try:
             target.unlink()
@@ -160,6 +188,9 @@ def modify_autostart(
             raise AutostartError("unable_to_remove_startup_entry") from None
         return AutostartStatus("disabled", changed=True)
     if current.state == "enabled":
+        current_bytes = _existing_bytes(root / "autostart" / DESKTOP_NAME)
+        if current_bytes != desktop_contents():
+            raise AutostartError("autostart_path_migration_requires_disable_first")
         return AutostartStatus("enabled")
 
     # Enabling requires a user-owned, non-group-writable XDG config root.
