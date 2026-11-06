@@ -44,7 +44,7 @@ class UnsafeHookConfiguration(ValueError):
     """No configuration content is exposed in errors or printed summaries."""
 
 
-_ABS_PATH = re.compile(r"/[A-Za-z0-9_/.-]+\\Z", re.ASCII)
+_ABS_PATH = re.compile(r"/[A-Za-z0-9_/.-]+\Z", re.ASCII)
 
 
 def _render_hook_command(source: str, interpreter: str, source_root: str) -> str:
