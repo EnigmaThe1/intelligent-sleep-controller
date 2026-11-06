@@ -6,7 +6,7 @@ ISC aims to let a Linux computer sleep when autonomous work is **safely idle**, 
 
 ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude, Codex, Ollama, or any AI service. Application-specific integrations will be optional.
 
-> **Development status — foundation only.** This branch implements conservative monitoring tools, an optional coding-agent hook sender, and persistent **OFF/MONITOR preferences**. It **does not install a daemon, change power settings, or automatically suspend a computer**. Manual Sleep/Hibernate, user-selected power profiles, display-only DPMS and timed or indefinite Keep Awake are explicit operator actions, never autonomous. ON and intelligent automatic suspend remain **not implemented**; optional login autostart for the MONITOR tray is available. An optional running tray can now supervise a local monitor-only process.
+> **Development status — safety-gated preview.** ISC provides native manual power controls, timed/indefinite Keep Awake, persistent OFF/MONITOR, a desktop tray, privacy-limited agent observations, and an **optional** systemd user monitor service. The full automatic-suspend ON path is **not enabled or considered safe**: verified coverage of independent background workloads and scheduled jobs, hardware resume testing, and protected final suspend checks are still outstanding. Installing the code or enabling MONITOR never requests suspend.
 
 ## Principles
 
@@ -165,13 +165,45 @@ not turn on automatic power management.
 The tray also uses a private session lock to avoid duplicate tray icons and
 competing monitoring children. Other applications are never terminated.
 
+### Optional independent monitoring service (systemd --user)
+
+The tray can supervise a monitor-only receiver, but it is not required for
+headless monitoring. ISC now also supports an **optional** native systemd
+user service that observes the saved OFF/MONITOR preference. It does not
+suspend the host, install a system unit, or require root privileges.
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc service
+PYTHONPATH=src /usr/bin/python3 -m isc service --service enable --confirm
+PYTHONPATH=src /usr/bin/python3 -m isc service --service disable --confirm
+```
+
+The first command reports installation/enabled/active status without making
+changes. Enable/disable are explicit operations using systemd's standard user
+service manager. The unit is private to the current user, and ISC never
+overwrites a foreign unit with the same name. It retries failed monitoring
+with bounded backoff, recovers only verified stale ISC sockets, and leaves a
+healthy receiver owned by another ISC session untouched.
+
+MONITOR selects observation, not power management; OFF causes the standalone
+supervisor to remain idle without collecting activity. A running receiver does
+not prove workload coverage. The CLI `isc status` and tray Status dialog
+expose aggregate event health, freshness and UNKNOWN counts without revealing
+task names, prompts or session identifiers. The service is **not enabled by
+installing or updating ISC**. Enabling it may briefly overlap with a currently
+running tray-managed monitor: IPC ownership ensures only one receives events.
+
+**Native user-service installation is a change to desktop startup behaviour**
+and should be explicitly approved and checked on the actual machine.
+
 ### Timed Keep Awake (explicit, cancellable, no daemon)
 
 The ISC tray now offers **Keep Awake** presets of **15, 30, 60, 120 or
 240 minutes**, plus **Cancel Keep Awake**. These are explicit user actions,
 independent of the saved OFF/MONITOR preference. The tray reports the remaining
-duration. The inhibitor is released on expiry, cancellation or when the tray
-exits; it is never silently restored at login, including the indefinite choice.
+duration. The inhibitor is released on expiry, cancellation, when the tray exits, or
+after an unexpected owner-process death. It is never silently restored at
+login, including the indefinite choice.
 
 The tray also offers **Keep Awake — Until Cancelled**, without a time limit, while ISC's tray is running. This setting is not currently restored automatically after the tray exits or after logout. The CLI offers the same operations in the **foreground**:
 
@@ -183,7 +215,10 @@ PYTHONPATH=src /usr/bin/python3 -m isc keep-awake --forever
 
 The first command explains the available durations; the second requests
 and holds a verified `systemd-inhibit --what=idle:sleep --mode=block`
-inhibitor until the selected duration elapses, or indefinitely until explicitly cancelled when `--forever` is selected. **Keep the terminal open**;
+inhibitor until the selected duration elapses, or indefinitely until cancelled
+when `--forever` is selected. A small child worker watches a private pipe
+from its owning process; if the tray or CLI dies, pipe EOF releases the
+inhibitor rather than leaving an orphaned indefinite lock. **Keep the terminal open**;
 Ctrl+C cancels the CLI lease immediately. The tray provides its own Cancel
 menu item. These are separate user-owned foreground inhibitors; the CLI
 cannot cancel a lease created in the tray or another terminal.
@@ -235,6 +270,17 @@ A power profile is displayed or offered only if the local power-profile
 service actually provides it. ISC does not install or impersonate that
 service. Opening native Power settings reuses the operating system's
 configuration window rather than creating a competing editor.
+
+## Running from a package or source checkout
+
+When installed from a Python package, ISC provides the `isc` command
+and the older `smart-sleep` alias. From an uninstalled source checkout,
+use `PYTHONPATH=src /usr/bin/python3 -m isc <command>`. The optional
+GTK/AppIndicator dependencies are provided by the Linux distribution.
+
+The source code and CI tests alone cannot validate hardware suspend/resume,
+systemd user-service integration, or the reliability of every third-party
+application adapter. Those require explicit host-level verification.
 
 ## Design and scope
 
