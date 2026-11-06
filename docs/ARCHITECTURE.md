@@ -187,23 +187,41 @@ the process exits. Launching a second instance while the lock is held
 exits without starting another tray or MONITOR child. Existing legacy tray
 instances must be closed before using the upgraded single-instance version.
 
-## Explicit timed Keep Awake
+## Explicit Keep Awake lifecycle protection
 
-The optional `src/isc/keepawake.py` starts a bounded, user-requested
-`systemd-inhibit --what=idle:sleep --mode=block` subprocess wrapping
-`/usr/bin/sleep`. The lock is verified by observing a unique, minimal
-`who/why` marker in logind's inhibitor inventory before success is
-reported. Durations are restricted to fixed presets (15–240 minutes).
-No shell, privileged helper, unattended service, or saved power-setting
-change is used. The child receives only a minimal environment; credentials
-and unrelated app tokens are not forwarded. The tray owns and cancels its
-own lock, including on Quit; the CLI holds its independent lock for the
-life of its foreground invocation and releases it on Ctrl+C. Cancel sends
-signals only to the verified new-session child process group, never arbitrary
-other processes. A failed identity check does not attempt to kill a guessed
-process. Inhibitors naturally expire when their wrapped sleep command ends.
-No inhibitor is acquired by MONITOR mode selection, login autostart or
-normal background observation.
+The user-requested `systemd-inhibit --what=idle:sleep --mode=block`
+command wraps `python -m isc.keepawake_worker`. The worker receives a
+private stdin pipe from the owning tray or CLI. A finite period expires
+normally; `Until Cancelled` has no deadline but exits on pipe EOF when
+the owner is closed or killed. Normal cancellation closes the pipe first.
+Only if the worker fails to respond does ISC verify and signal its own
+process group. This avoids indefinite orphan inhibitors after unexpected
+parent death. The lock is verified in logind before reporting success.
+Keep Awake still belongs to its launching process; cross-process shared
+cancel control remains a separate feature.
+
+## Independent systemd user-service and receiver recovery
+
+`isc service --service enable --confirm` installs one user-owned
+`isc-monitor.service` under the standard XDG systemd user-unit path and
+uses native `systemctl --user` enable/disable. It is deliberately opt-in;
+there are no root privileges, system-level units or automatic suspend
+requests. The same `isc monitor-service` command can run the service
+supervisor directly. The supervisor responds to the stored OFF/MONITOR
+preference and uses bounded backoff after errors.
+
+The advertised receiver is protected by a persistent private kernel
+`flock` lock. It safely reclaims only a same-user, private, demonstrably
+non-listening stale ISC socket left by a crash. It never removes a live or
+ambiguous socket or a non-ISC file. The tray and service can both discover
+a healthy external receiver and leave it untouched.
+
+The receiver exposes a **same-user, read-only** health query on the
+existing private Unix socket. It returns aggregate event counts, age of
+the latest event and observed ACTIVE/UNKNOWN/WAITING_HUMAN totals only.
+No prompts, session fingerprints, commands, PIDs or filenames are returned.
+These observations always report `coverage_verified=False` and **must not**
+be reused as authority for autonomous suspension.
 
 ## Extended native desktop power controls
 
@@ -225,11 +243,11 @@ The same native-control backend serves CLI and tray actions:
   preflight checks and an explicit typed confirmation; the actual request
   is made using systemd's native verbs. Do not equate advertised capability
   with verified hardware or disk-resume reliability.
-- **Indefinite Keep Awake:** the user may explicitly request `sleep infinity`
-  under a native `systemd-inhibit` lock. It never expires on a timer, but
-  exits when cancelled, the tray closes, or the owning foreground CLI ends.
-  It does not persist a lock across logout/reboot or turn OFF into ON.
-  Finite timed locks retain the existing native mechanism.
+- **Indefinite Keep Awake:** the user may explicitly request an indefinite
+  parent-lifetime worker inside a native `systemd-inhibit` command. It exits
+  when cancelled, the tray closes, or the owner process dies. It does not
+  persist across logout/reboot or turn OFF into ON. Finite presets use the
+  same native mechanism with a deadline.
 
 The ISC automatic ON action remains disabled. New manual capabilities
 are not evidence that the autonomous workload-coverage requirement is met.
