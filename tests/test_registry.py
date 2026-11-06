@@ -183,6 +183,18 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(states[0].state, WorkState.UNKNOWN)
         self.assertEqual(reg.count(), MAX_RETAINED_LEASES)
 
+    def test_fifty_thousand_unique_sessions_have_fixed_memory_bound(self):
+        from isc.registry import MAX_RETAINED_LEASES
+        reg = WorkRegistry()
+        for index in range(50000):
+            reg.report("claude_code", f"session-{index}", WorkState.ACTIVE,
+                       now=1, ttl_seconds=30)
+        self.assertEqual(reg.count(), MAX_RETAINED_LEASES)
+        self.assertTrue(reg.tracking_history_lost)
+        work = reg.observed_work(now=2)
+        self.assertEqual(len(work), MAX_RETAINED_LEASES + 1)
+        self.assertEqual(work[0].state, WorkState.UNKNOWN)
+
     def test_registry_refresh_does_not_overwrite_or_evict_unrelated_work(self):
         from isc.registry import MAX_RETAINED_LEASES
         reg = WorkRegistry()
