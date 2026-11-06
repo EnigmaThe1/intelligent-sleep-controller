@@ -351,10 +351,14 @@ Each Unix-socket client has an overall time budget; a slow sender cannot
 indefinitely occupy the single-threaded receiver. Receiver accept errors
 are handled without treating them as successful work observations.
 
-ISC hook planning and installation now recognise the same exact ISC command
-across supported legacy async/timeout variants. Installation is idempotent
-and disabling removes only ISC command handlers, leaving unrelated handlers
-and group metadata. Existing agent hooks are not modified by upgrading ISC.
+ISC hook planning and installation now recognise the same canonical ISC
+command structure across supported legacy async/timeout variants and previous
+Python/source locations. Installation is idempotent, and disabling removes
+only ISC command handlers, leaving unrelated handlers and group metadata.
+Legacy ownership requires the complete canonical command form, including
+restricted absolute paths and an exact ISC entry point; arbitrary shell
+commands or lookalike fragments are not accepted. Existing agent hooks are
+not modified by upgrading ISC.
 
 A systemd user unit or GNOME autostart entry created by an older ISC
 interpreter/source path can still be **disabled** after the installation is
