@@ -285,6 +285,12 @@ comparison reports appearance, continuity, disappearance and PID reuse.
 This observation cannot establish process success, exact application intent,
 all subprocesses, remote work, cross-user processes, or complete sleep
 eligibility. A vanished process is NOT a completed application task and an
-empty snapshot is NOT proof of safety. No asynchronous watcher is installed
-by this diagnostic. It does not register authoritative completion or change
-systemd, GNOME, suspend settings or ISC mode.
+empty snapshot is NOT proof of safety. A separate low-frequency background observer runs only while ISC owns the
+persistent MONITOR receiver. It uses a daemon thread to keep potentially
+slow `/proc` scanning separate from the hook-socket event loop. Its process
+identities remain internal to the observer; the receiver stores only
+aggregate counts, cumulative observed transitions/races and a timestamp.
+Missing or stale samples are exposed as UNKNOWN through the read-only
+health protocol. Neither this observer nor the standalone diagnostic
+registers authoritative completion or changes systemd, GNOME, suspend
+settings or ISC mode.
