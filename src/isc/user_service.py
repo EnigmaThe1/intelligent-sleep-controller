@@ -55,6 +55,32 @@ def unit_contents(
     ).encode("utf-8")
 
 
+def _is_isc_unit(raw: bytes) -> bool:
+    """Validate *all* generated unit fields while allowing older ISC paths.
+
+    A matching description alone is never sufficient. Legacy ISC units had
+    no separate identity marker, so require exact canonical structure after
+    extracting only the two installation-specific paths.
+    """
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError:
+        return False
+    match_source = re.search(r"(?m)^Environment=PYTHONPATH=(/[A-Za-z0-9_/.-]+)$", text)
+    match_exe = re.search(
+        r"(?m)^ExecStart=(/[A-Za-z0-9_/.-]+) -B -m isc monitor-service$", text
+    )
+    if match_source is None or match_exe is None:
+        return False
+    try:
+        return raw == unit_contents(
+            interpreter=match_exe.group(1),
+            source_root=match_source.group(1),
+        )
+    except UserServiceError:
+        return False
+
+
 def _root(config_root: str | Path | None) -> Path:
     name = config_root or os.environ.get("XDG_CONFIG_HOME") or (
         Path.home() / ".config"
@@ -139,7 +165,7 @@ def inspect_user_service(
         _safe_dir(root)
         _safe_dir(root / "systemd")
         _safe_dir(unit.parent)
-        if _read_owned(unit) != unit_contents():
+        if not _is_isc_unit(_read_owned(unit)):
             raise UserServiceError("foreign_or_modified_unit")
         installed = True
     else:
@@ -171,6 +197,10 @@ def modify_user_service(
     parent = _unit_directory(root)
     target = parent / UNIT_NAME
     if action == "enable":
+        if status.installed and _read_owned(target) != unit_contents():
+            # A genuine older ISC unit can be explicitly disabled even after
+            # moving Python/source paths. Never silently restart a stale unit.
+            raise UserServiceError("service_path_migration_requires_disable_first")
         if not status.installed:
             _safe_dir(root)
             systemd = root / "systemd"
@@ -200,7 +230,7 @@ def modify_user_service(
         if status.installed:
             if not _run_systemd("disable", "--now", UNIT_NAME):
                 raise UserServiceError("user_service_disable_failed")
-            if _read_owned(target) != unit_contents():
+            if not _is_isc_unit(_read_owned(target)):
                 raise UserServiceError("unit_changed_before_removal")
             target.unlink()
             _sync(parent)
