@@ -421,6 +421,12 @@ class TrayController:
                 f"unknown: {health.observed_unknown}\n"
                 f"Most recent event: {age}"
             )
+        if health is not None and health.claude_code_observations is not None:
+            monitoring_detail += (
+                f"\nClaimed source events: Claude Code={health.claude_code_observations}, "
+                f"Codex={health.codex_observations}; "
+                f"synthetic probes={health.synthetic_probe_events}"
+            )
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
