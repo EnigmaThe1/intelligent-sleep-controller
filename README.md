@@ -295,14 +295,24 @@ agent or editing its configuration:
 PYTHONPATH=src /usr/bin/python3 -m isc hook-self-test --source claude_code
 ```
 
-This sends a **synthetic Stop event** through ISC's normal silent
-`send-hook` command, then checks the receiver's aggregate accepted counter.
-Synthetic Stop is conservatively UNKNOWN, never proof of task completion.
-The test does not run Claude Code, request power management, create files or
-install hooks. It may briefly add one synthetic observation to in-memory
-receiver counters. Concurrent real events may increment the same counter,
-so a successful test confirms a working local route but **not** actual
-third-party hook execution or complete workload coverage.
+This sends a reserved **synthetic IscSelfTest event** through ISC's normal
+silent `send-hook` command, then checks the receiver's aggregate accepted
+counter. Updated receivers count these requests separately and **do not
+register them as workload activity**. Older receivers treat unrecognised events
+as UNKNOWN; neither behavior can authorize suspend. The test does not run
+Claude Code, request power management, create files or install hooks. Live
+unrelated events may increment the aggregate counter, so a successful test
+confirms a usable local route but **not** actual third-party hook execution
+or complete workload coverage.
+
+`isc status` and the tray's Status dialog now show **non-probe events claimed
+by Claude Code and Codex separately**, plus synthetic diagnostic counts.
+These are local sender claims, **not authenticated application identities**.
+No prompts, filenames, raw session identifiers, or full task details are
+collected in these counters. After updating the code, the already-running
+user monitor service must be restarted to load the new receiver protocol;
+until then per-source information is shown as unavailable. Restarting resets
+the service's in-memory event counts.
 
 If the local route works but live event counts remain zero during genuine
 agent use, inspect the application-specific hook execution and environment
