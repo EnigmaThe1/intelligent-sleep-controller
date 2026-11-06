@@ -29,7 +29,10 @@
 - [ ] Scheduled service discovery and conservative timer safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
 - [x] Explicit foreground MONITOR supervisor with persistent OFF shutdown and safe invalid-config failure
-- [ ] Optional systemd user service, startup supervision, failure recovery and local minimal audit log
+- [x] Optional systemd --user MONITOR supervisor with bounded recovery and OFF idleness (not installed by code changes)
+- [x] Private stale-socket recovery with exclusive ownership and foreign-path protection
+- [x] Same-user aggregate health status and event freshness (not authoritative coverage)
+- [ ] Trusted workload-coverage integrity, timer/wake verification, and minimal local audit log
 - [ ] Tests using synthetic system states; zero suspend actions
 
 ## Phase 2 — controlled power management
@@ -41,7 +44,8 @@
 - [ ] Hardware suspend, hibernate and hybrid resume verification on non-critical test systems
 - [x] Explicit timed Keep Awake via verified systemd inhibitor (tray presets + CLI foreground; cancel/expiry)
 - [x] Explicit indefinite Keep Awake until Cancelled while tray/CLI is running
-- [ ] Shared/persistent Keep Awake ownership across independent tray and CLI processes
+- [x] Keep Awake owner-crash release using parent-pipe EOF and native systemd inhibition
+- [ ] Cross-process shared Keep Awake ownership or deliberate persistence across tray restarts
 - [ ] Safe inhibitor lifecycle and privileged suspend executor
 - [ ] Reversible GNOME settings ownership, recovery and uninstall
 - [ ] Race-safe pre-suspend check; opt-in only
@@ -70,7 +74,8 @@
 - [x] Optional GTK3/AppIndicator status tray with OFF/MONITOR and guarded manual Suspend (no autostart)
 - [x] Tray-owned MONITOR process starts/stops with persistent OFF/MONITOR choices (not login autostart)
 - [x] Optional per-user autostart enable/disable with explicit approval, foreign-file protection and single-instance tray lock (not enabled on host)
-- [ ] Supervised crash recovery and complete monitoring status
+- [x] Optional monitor-only recovery and aggregate health status
+- [ ] Authoritative multi-application coverage and agent crash recovery
 
 ## Phase 4 — portability and releases
 
