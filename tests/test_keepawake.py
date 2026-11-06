@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.keepawake import (
-    INHIBITOR_EXECUTABLE, SLEEP_EXECUTABLE, KeepAwakeError,
+    INHIBITOR_EXECUTABLE, KeepAwakeError,
     KeepAwakeManager, _observed_lock, inhibitor_command,
 )
 
@@ -21,7 +21,7 @@ class KeepAwakeTests(unittest.TestCase):
         self.assertEqual(cmd[0], "/usr/bin/systemd-inhibit")
         self.assertIn("--what=idle:sleep", cmd)
         self.assertIn("--mode=block", cmd)
-        self.assertEqual(cmd[-2:], ("/usr/bin/sleep", "1800"))
+        self.assertEqual(cmd[-5:], (sys.executable, "-B", "-m", "isc.keepawake_worker", "1800"))
         self.assertNotIn("--what=shutdown", cmd)
         self.assertNotIn("systemctl", cmd)
         self.assertNotIn("sudo", cmd)
@@ -93,14 +93,14 @@ class KeepAwakeTests(unittest.TestCase):
             self.assertLessEqual(status.remaining_seconds, 900)
             call = spawn.call_args
             self.assertEqual(call.args[0][0], INHIBITOR_EXECUTABLE)
-            self.assertEqual(call.args[0][-2], SLEEP_EXECUTABLE)
-            self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(call.args[0][-4:-1], ("-B", "-m", "isc.keepawake_worker"))
+            self.assertEqual(call.kwargs["stdin"], subprocess.PIPE)
             self.assertTrue(call.kwargs["start_new_session"])
             self.assertTrue(call.kwargs["close_fds"])
             observed.assert_called()
         finally:
             manager.cancel()
-        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        killpg.assert_not_called()
 
     @patch("isc.keepawake.os.killpg")
     @patch("isc.keepawake.os.getpgid", return_value=4321)
@@ -169,7 +169,7 @@ class KeepAwakeTests(unittest.TestCase):
         manager.start(15)
         manager.cancel()
         manager.cancel()
-        self.assertEqual(killpg.call_count, 1)
+        self.assertEqual(killpg.call_count, 0)
         self.assertFalse(manager.status().requested)
 
     @patch("isc.keepawake.os.killpg", side_effect=AssertionError("other group signalled"))
@@ -183,6 +183,7 @@ class KeepAwakeTests(unittest.TestCase):
         manager, child = self._working_manager()
         spawn.return_value = child
         manager.start(15)
+        child.wait.side_effect = subprocess.TimeoutExpired("inhibit", 3)
         with self.assertRaisesRegex(
             KeepAwakeError, "inhibitor_process_identity_changed",
         ):
@@ -192,7 +193,7 @@ class KeepAwakeTests(unittest.TestCase):
 
     def test_infinite_command_uses_native_coreutils_sleep(self):
         args = inhibitor_command(None, "abc123")
-        self.assertEqual(args[-2:], ("/usr/bin/sleep", "infinity"))
+        self.assertEqual(args[-4:], ("-B", "-m", "isc.keepawake_worker", "forever"))
         self.assertIn("--what=idle:sleep", args)
 
     @patch("isc.keepawake.os.killpg")
@@ -208,10 +209,50 @@ class KeepAwakeTests(unittest.TestCase):
         status = manager.start(None)
         self.assertTrue(status.requested)
         self.assertIsNone(status.remaining_seconds)
-        self.assertEqual(spawn.call_args.args[0][-1], "infinity")
+        self.assertEqual(spawn.call_args.args[0][-1], "forever")
         self.assertIsNone(manager.status().remaining_seconds)
         manager.cancel()
         killpg.assert_called_once_with(4321, signal.SIGTERM)
+
+
+    @patch("isc.keepawake.os.killpg")
+    @patch("isc.keepawake.os.getpgid", return_value=4321)
+    @patch("isc.keepawake._observed_lock", return_value=True)
+    @patch("isc.keepawake.os.access", return_value=True)
+    @patch("isc.keepawake.subprocess.Popen")
+    def test_cancel_prefers_pipe_eof_before_signals(
+        self, spawn, executable, observed, getpgid, killpg,
+    ):
+        manager, child = self._working_manager()
+        child.stdin.closed = False
+        spawn.return_value = child
+        manager.start(None)
+        manager.cancel()
+        child.stdin.close.assert_called_once()
+        child.wait.assert_called_once_with(timeout=3)
+        getpgid.assert_not_called()
+        killpg.assert_not_called()
+
+    @patch("isc.keepawake.os.killpg")
+    @patch("isc.keepawake.os.getpgid", return_value=4321)
+    @patch("isc.keepawake._observed_lock", return_value=True)
+    @patch("isc.keepawake.os.access", return_value=True)
+    @patch("isc.keepawake.subprocess.Popen")
+    def test_cancel_fallback_only_targets_owned_child(
+        self, spawn, executable, observed, getpgid, killpg,
+    ):
+        manager, child = self._working_manager()
+        child.stdin.closed = False
+        child.wait.side_effect = [
+            subprocess.TimeoutExpired("inhibit", 3), 0,
+        ]
+        spawn.return_value = child
+        manager.start(15)
+        manager.cancel()
+        child.stdin.close.assert_called_once()
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        self.assertFalse(manager.status().requested)
+
 
 
 if __name__ == "__main__":
