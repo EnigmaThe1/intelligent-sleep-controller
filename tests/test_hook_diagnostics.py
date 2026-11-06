@@ -1,6 +1,8 @@
 """Synthetic hook diagnostics never launch an agent or enable sleep."""
 import json
 import os
+from tempfile import TemporaryDirectory
+import threading
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -16,6 +18,29 @@ def health(accepted: int):
 
 
 class HookDeliveryTests(unittest.TestCase):
+    def test_real_subprocess_delivers_synthetic_hook_to_private_receiver(self):
+        """End-to-end local IPC: no Claude/Codex or system power is invoked."""
+        from isc.receiver import LocalMonitor
+        with TemporaryDirectory() as tmp:
+            runtime = Path(tmp) / "run"
+            runtime.mkdir(mode=0o700)
+            with patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(runtime)}):
+                with LocalMonitor(runtime_dir=runtime, advertise=True) as receiver:
+                    thread = threading.Thread(
+                        target=receiver.run_for, args=(0.8,), daemon=True,
+                    )
+                    thread.start()
+                    try:
+                        result = check_hook_delivery("claude_code")
+                        self.assertTrue(result.delivered, result.status)
+                        self.assertEqual(result.before_accepted, 0)
+                        self.assertEqual(result.after_accepted, 1)
+                        self.assertEqual(receiver.accepted, 1)
+                        self.assertEqual(receiver.counts["unknown"], 1)
+                    finally:
+                        thread.join(timeout=3)
+                        self.assertFalse(thread.is_alive())
+
     @patch("isc.hook_diagnostics.read_monitor_health", return_value=None)
     @patch("isc.hook_diagnostics.subprocess.run")
     def test_no_receiver_does_not_invoke_hook(self, execute, query):
