@@ -181,7 +181,7 @@ class ReceiverTests(unittest.TestCase):
     def test_second_advertised_monitor_does_not_clobber_first(self):
         with LocalMonitor(runtime_dir=self.base, advertise=True) as server:
             original = server.path.lstat().st_ino
-            with self.assertRaises(FileExistsError):
+            with self.assertRaises(OSError):
                 LocalMonitor(runtime_dir=self.base, advertise=True)
             self.assertEqual(server.path.lstat().st_ino, original)
 
@@ -206,9 +206,58 @@ class ReceiverTests(unittest.TestCase):
         named.mkdir(mode=0o700)
         marker = named / "existing-data"
         marker.write_text("do not touch")
-        with self.assertRaises(FileExistsError):
+        with self.assertRaises(OSError):
             LocalMonitor(runtime_dir=self.base, advertise=True)
         self.assertEqual(marker.read_text(), "do not touch")
+
+    def test_recovers_private_stale_directory_after_abrupt_exit(self):
+        """A no-longer-listening socket is safely reclaimed before binding."""
+        named = self.base / "isc-monitor"
+        named.mkdir(mode=0o700)
+        abandoned = named / "events.sock"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as old:
+            old.bind(str(abandoned))
+            abandoned.chmod(0o600)
+        # The original socket is no longer listening, but its path remains.
+        self.assertTrue(abandoned.exists())
+        with LocalMonitor(runtime_dir=self.base, advertise=True) as fresh:
+            self.assertEqual(fresh.path, abandoned)
+            self.assertNotEqual(fresh._socket_inode, 0)
+        self.assertFalse(named.exists())
+
+    def test_recovers_empty_private_directory_after_crash(self):
+        named = self.base / "isc-monitor"
+        named.mkdir(mode=0o700)
+        with LocalMonitor(runtime_dir=self.base, advertise=True):
+            pass
+        self.assertFalse(named.exists())
+
+    def test_preserves_actively_listening_foreign_socket(self):
+        named = self.base / "isc-monitor"
+        named.mkdir(mode=0o700)
+        socket_path = named / "events.sock"
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as other:
+            other.bind(str(socket_path))
+            other.listen(1)
+            socket_path.chmod(0o600)
+            original_inode = socket_path.stat().st_ino
+            with self.assertRaises(OSError):
+                LocalMonitor(runtime_dir=self.base, advertise=True)
+            self.assertEqual(socket_path.stat().st_ino, original_inode)
+        socket_path.unlink()
+        named.rmdir()
+
+    def test_refuses_ambiguous_socket_symlink_without_deleting_target(self):
+        named = self.base / "isc-monitor"
+        named.mkdir(mode=0o700)
+        destination = self.base / "secret_file"
+        destination.write_text("keep")
+        (named / "events.sock").symlink_to(destination)
+        with self.assertRaises((OSError, PermissionError)):
+            LocalMonitor(runtime_dir=self.base, advertise=True)
+        self.assertEqual(destination.read_text(), "keep")
+        (named / "events.sock").unlink()
+        named.rmdir()
 
     def test_runtime_root_symlink_rejected(self):
         from isc.receiver import discover_monitor_socket
