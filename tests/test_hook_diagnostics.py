@@ -36,7 +36,10 @@ class HookDeliveryTests(unittest.TestCase):
                         self.assertEqual(result.before_accepted, 0)
                         self.assertEqual(result.after_accepted, 1)
                         self.assertEqual(receiver.accepted, 1)
-                        self.assertEqual(receiver.counts["unknown"], 1)
+                        self.assertEqual(receiver.counts["unknown"], 0)
+                        self.assertEqual(receiver._synthetic_probe_events, 1)
+                        self.assertEqual(sum(receiver._source_observations.values()), 0)
+                        self.assertEqual(receiver.registry.count(), 0)
                     finally:
                         thread.join(timeout=3)
                         self.assertFalse(thread.is_alive())
@@ -78,7 +81,7 @@ class HookDeliveryTests(unittest.TestCase):
         self.assertNotIn("DO_NOT_DISCLOSE", str(kwargs["env"]))
         data = json.loads(kwargs["input"])
         self.assertEqual(set(data), {"hook_event_name", "session_id"})
-        self.assertEqual(data["hook_event_name"], "Stop")
+        self.assertEqual(data["hook_event_name"], "IscSelfTest")
         self.assertTrue(data["session_id"].startswith("isc-synthetic-probe-"))
         self.assertEqual(len(data["session_id"]), len("isc-synthetic-probe-")+24)
 
