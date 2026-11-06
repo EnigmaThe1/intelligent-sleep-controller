@@ -97,3 +97,14 @@ coverage. Event source names on the Unix socket are same-user claims, not
 cryptographic proof of the originating application. The status view may
 display only aggregated counts and must never use their absence as proof
 of safe suspend eligibility.
+
+## Untrusted process-lifecycle observations
+
+An identity must include PID and kernel process start ticks to resist PID
+reuse. A repeated PID with a changed start time is a different process.
+Disappearance, process-name changes, zombies and observation races must not
+be interpreted as successful or safe task completion. Child discovery is
+partial (same-user and selected process roots only), and a missing child
+must not imply that no work remains. Process diagnostics must never read
+environment variables, command arguments, private files, or network
+payloads. All process observations remain untrusted for enabling ON.
