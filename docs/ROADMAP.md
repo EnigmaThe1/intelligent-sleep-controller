@@ -26,7 +26,8 @@
 - [ ] Multi-session user-idle and active-seat discovery
 - [x] Read-only current-user Linux /proc candidate inventory (lifecycle classification pending)
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
-- [ ] Scheduled service discovery and conservative timer safety checks
+- [x] Read-only Linux session and loaded systemd timer discovery with UNKNOWN on failures
+- [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
 - [x] Explicit foreground MONITOR supervisor with persistent OFF shutdown and safe invalid-config failure
 - [x] Optional systemd --user MONITOR supervisor with bounded recovery and OFF idleness (not installed by code changes)
