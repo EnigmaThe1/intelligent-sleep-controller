@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from collections import Counter
 import json
+import errno
+import fcntl
 import math
 import os
 from pathlib import Path
@@ -77,6 +79,75 @@ def send_discovered_observation(
     """No monitor? Do nothing. Never wait for one or block an agent."""
     address = discover_monitor_socket(runtime_dir=runtime_dir)
     return False if address is None else send_observation(address, observation)
+
+
+
+def _lock_monitor_root(root: Path) -> int:
+    """Serialize advertised monitor ownership, including recovery of crashes."""
+    path = root / "isc-monitor.lock"
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+            or info.st_mode & 0o077
+        ):
+            raise PermissionError("unsafe_monitor_lock")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _prepare_monitor_directory(root: Path) -> Path:
+    """Recover only a private, demonstrably stale ISC Unix socket.
+
+    An active, foreign, insecure or ambiguous path is never removed.
+    Caller MUST hold the per-runtime monitor lock.
+    """
+    directory = root / MONITOR_DIRECTORY_NAME
+    try:
+        directory.mkdir(mode=0o700)
+    except FileExistsError:
+        pass
+    info = directory.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_mode & 0o077
+    ):
+        raise PermissionError("unsafe_monitor_directory")
+    contents = tuple(directory.iterdir())
+    if not contents:
+        return directory
+    socket_path = directory / "events.sock"
+    if contents != (socket_path,):
+        raise OSError("unexpected_monitor_directory_contents")
+    sock_info = socket_path.lstat()
+    if (
+        not stat.S_ISSOCK(sock_info.st_mode)
+        or sock_info.st_uid != os.getuid()
+        or sock_info.st_mode & 0o077
+    ):
+        raise PermissionError("unsafe_existing_socket")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+        peer.settimeout(0.2)
+        try:
+            peer.connect(str(socket_path))
+        except OSError as exc:
+            if exc.errno != errno.ECONNREFUSED:
+                raise OSError("existing_socket_state_unverified") from None
+        else:
+            raise OSError("existing_monitor_socket_active")
+    # No listener exists, and only the exact unchanged inode is removed.
+    current = socket_path.lstat()
+    if (current.st_dev, current.st_ino, current.st_mode) != (
+        sock_info.st_dev, sock_info.st_ino, sock_info.st_mode
+    ):
+        raise OSError("existing_socket_changed")
+    socket_path.unlink()
+    return directory
 
 
 MAX_MESSAGE_BYTES = 1024
@@ -157,30 +228,45 @@ class LocalMonitor:
         advertise: bool = False,
     ) -> None:
         root = _private_runtime_root(runtime_dir)
-        if advertise:
-            # Fail rather than clobber another instance or an orphaned path.
-            self._dir = root / MONITOR_DIRECTORY_NAME
-            self._dir.mkdir(mode=0o700)
-        else:
-            self._dir = Path(tempfile.mkdtemp(prefix="isc-", dir=root))
-        self.path = self._dir / "events.sock"
-        self.registry = WorkRegistry()
-        self.counts: Counter[str] = Counter()
-        self.event_counts: Counter[tuple[str, str]] = Counter()
-        self.accepted = 0
-        self.rejected = 0
+        self._lock_fd: int | None = None
         self._closed = False
-        self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._listener: socket.socket | None = None
+        self._socket_inode: int | None = None
         try:
+            if advertise:
+                self._lock_fd = _lock_monitor_root(root)
+                self._dir = _prepare_monitor_directory(root)
+            else:
+                self._dir = Path(tempfile.mkdtemp(prefix="isc-", dir=root))
+            self.path = self._dir / "events.sock"
+            self.registry = WorkRegistry()
+            self.counts: Counter[str] = Counter()
+            self.event_counts: Counter[tuple[str, str]] = Counter()
+            self.accepted = 0
+            self.rejected = 0
+            self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._listener.bind(str(self.path))
             self.path.chmod(0o600)
             self._listener.listen(16)
             self._socket_inode = self.path.lstat().st_ino
         except BaseException:
-            self._listener.close()
-            self.path.unlink(missing_ok=True)
-            self._dir.rmdir()
+            if self._listener is not None:
+                self._listener.close()
+            # Do not delete a previously existing socket on an early failure.
+            if self._socket_inode is not None:
+                self.path.unlink(missing_ok=True)
+            if hasattr(self, "_dir"):
+                try:
+                    self._dir.rmdir()
+                except OSError:
+                    pass
+            self._release_lock()
             raise
+
+    def _release_lock(self) -> None:
+        if self._lock_fd is not None:
+            os.close(self._lock_fd)
+            self._lock_fd = None
 
     def __enter__(self) -> LocalMonitor:
         return self
@@ -261,4 +347,7 @@ class LocalMonitor:
                 self.path.unlink()
         except FileNotFoundError:
             pass
-        self._dir.rmdir()
+        try:
+            self._dir.rmdir()
+        finally:
+            self._release_lock()
