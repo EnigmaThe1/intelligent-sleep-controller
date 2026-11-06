@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import subprocess
 import time
@@ -17,6 +18,7 @@ from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
+from .process_lifecycle import read_process_lineage, compare_process_lineage
 from .receiver import LocalMonitor, send_observation, send_discovered_observation, read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
 from .service import MonitorUnavailable, serve_monitor
@@ -155,6 +157,51 @@ def processes() -> int:
         print("A process name does NOT prove task activity or completion.")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     print("No system configuration has been changed.")
+    return 0
+
+
+def process_watch_cli(*, seconds: float) -> int:
+    """Compare two bounded /proc snapshots without making activity claims."""
+    if not math.isfinite(seconds) or not (0 <= seconds <= 60):
+        print("Process observation interval must be between 0 and 60 seconds.")
+        return 2
+    first = read_process_lineage()
+    if first is None:
+        print("ISC process lineage: UNKNOWN (first snapshot failed).")
+        print("No sleep eligibility established.")
+        return 2
+    if seconds:
+        time.sleep(seconds)
+    second = read_process_lineage()
+    if second is None:
+        print("ISC process lineage: UNKNOWN (second snapshot failed).")
+        print("No sleep eligibility established.")
+        return 2
+    change = compare_process_lineage(first, second)
+    if change is None:
+        print("ISC process lineage: UNKNOWN (comparison failed).")
+        return 2
+    print("ISC PROCESS LIFECYCLE — READ ONLY")
+    print(
+        f"First sample: {len(first.roots)} selected roots, "
+        f"{len(first.descendants)} same-user descendants"
+    )
+    print(
+        f"Second sample: {len(second.roots)} selected roots, "
+        f"{len(second.descendants)} same-user descendants"
+    )
+    print(
+        f"Identity continuing: {change.continuing}; "
+        f"appeared: {change.appeared}; "
+        f"disappeared: {change.disappeared}; "
+        f"PID reused: {change.reused_pids}"
+    )
+    print(f"Process visibility races: {change.visibility_races}")
+    print("A disappearing process does NOT prove its work completed.")
+    print("Inventory is partial: different users, kernel work, timers, and")
+    print("independent workloads may be unobserved.")
+    print("Coverage verified: NO. Automatic suspension remains disabled.")
+    print("No system or application settings changed.")
     return 0
 
 
@@ -599,7 +646,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "hook-self-test"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "hook-self-test", "process-watch"),
         default="status",
     )
     parser.add_argument(
@@ -618,6 +665,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "process-watch":
+        return process_watch_cli(seconds=args.seconds)
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
