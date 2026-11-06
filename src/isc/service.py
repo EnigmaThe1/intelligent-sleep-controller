@@ -35,7 +35,7 @@ def _read_preference() -> str:
         raise MonitorUnavailable("invalid_or_unavailable_mode") from None
 
 
-def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5) -> MonitorSummary:
+def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: bool = False) -> MonitorSummary:
     """Serve while MONITOR is persistently selected.
 
     max_seconds=0 runs indefinitely until OFF, interruption or error.
@@ -57,9 +57,10 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5) -> Monit
     deadline = time.monotonic() + max_seconds if max_seconds else None
     try:
         with LocalMonitor(advertise=True) as receiver:
-            print("ISC CONTROLLED FOREGROUND MONITOR (NO SUSPEND)", flush=True)
-            print(f"Private Unix socket: {receiver.path}", flush=True)
-            print("OFF preference stops monitoring. Ctrl+C stops foreground monitoring.", flush=True)
+            if not quiet:
+                print("ISC CONTROLLED FOREGROUND MONITOR (NO SUSPEND)", flush=True)
+                print(f"Private Unix socket: {receiver.path}", flush=True)
+                print("OFF preference stops monitoring. Ctrl+C stops foreground monitoring.", flush=True)
             reason = "time_limit"
             try:
                 while True:
