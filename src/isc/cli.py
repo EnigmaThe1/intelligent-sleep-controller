@@ -95,6 +95,19 @@ def status() -> int:
             f"waiting-human={health.observed_waiting_human}, "
             f"unknown={health.observed_unknown}"
         )
+        if health.claude_code_observations is not None:
+            print(
+                "Claimed source events (excluding synthetic probes): "
+                f"Claude Code={health.claude_code_observations}, "
+                f"Codex={health.codex_observations}"
+            )
+            print(
+                "Synthetic diagnostic events: "
+                f"{health.synthetic_probe_events}"
+            )
+            print("Source names are sender-claimed, not authenticated application identity.")
+        else:
+            print("Per-source observations: unavailable (receiver requires restart).")
         print("Coverage verified: NO (observations are not authority)")
     print("No system configuration has been changed.")
     return 0
@@ -287,7 +300,8 @@ def hook_self_test(source: str) -> int:
     if result.after_accepted is not None:
         print("Receiver accepted after: " + str(result.after_accepted))
     print("No real agent launched. No hook settings changed.")
-    print("Synthetic Stop observations are UNKNOWN, not completion.")
+    print("Synthetic test events never establish actual workload activity.")
+    print("Updated receivers count synthetic probes separately from source activity.")
     print("Other concurrent events may affect the aggregate counter.")
     print("This test does not verify third-party hook invocation or full work coverage.")
     return 0 if result.delivered else 2
