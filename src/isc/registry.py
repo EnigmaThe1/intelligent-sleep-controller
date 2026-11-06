@@ -70,6 +70,11 @@ class WorkRegistry:
         del self._leases[victim]
         self._tracking_history_lost = True
 
+    def observed_child_work(self, source: str, task_id: str) -> bool:
+        """Sticky unverified child signal within the retained session lease."""
+        item = self._leases.get((source, task_id))
+        return item is not None and item.active_children
+
     def report(
         self,
         source: str,
