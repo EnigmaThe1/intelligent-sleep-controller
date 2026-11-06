@@ -282,6 +282,26 @@ The source code and CI tests alone cannot validate hardware suspend/resume,
 systemd user-service integration, or the reliability of every third-party
 application adapter. Those require explicit host-level verification.
 
+## Native scheduled-work and session discovery (read only)
+
+A separate diagnostic command queries standard OS interfaces and returns
+aggregate counts without storing user names, unit names or command arguments:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc native-activity
+```
+
+It inspects `loginctl list-sessions` and loaded timer units from
+`systemctl --system` and `systemctl --user`. If an OS query fails or its
+output cannot be verified, its result is **UNKNOWN**, not zero.
+
+This is **partial discovery only**: loaded timer units do not cover all
+scheduled work, cron/at jobs, external automation, unobserved user services,
+independent application schedules, or what will happen after the machine
+suspends. The presence of sessions is not proof of current human activity.
+The result must never set `coverage_complete` or
+`scheduled_work_safe` in ISC's eligibility policy.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)
