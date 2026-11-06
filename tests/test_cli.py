@@ -474,5 +474,30 @@ class CLITests(unittest.TestCase):
         run.assert_called_once_with()
 
 
+    @patch("isc.cli.read_native_activity")
+    def test_native_activity_reports_partial_coverage_only(self, observed):
+        from isc.native_observers import NativeActivity
+        observed.return_value = NativeActivity(2, 3, 4)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["native-activity"]), 0)
+        content = output.getvalue()
+        self.assertIn("Linux login sessions observed: 2", content)
+        self.assertIn("Loaded systemd system timers: 3", content)
+        self.assertIn("Loaded systemd user timers: 4", content)
+        self.assertIn("Coverage: INCOMPLETE", content)
+        self.assertIn("No automatic suspension permitted", content)
+
+    @patch("isc.cli.read_native_activity")
+    def test_native_activity_unknown_is_not_inferred_zero(self, observed):
+        from isc.native_observers import NativeActivity
+        observed.return_value = NativeActivity(None, None, None)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["native-activity"]), 0)
+        self.assertIn("UNKNOWN", output.getvalue())
+        self.assertIn("Coverage: INCOMPLETE", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
