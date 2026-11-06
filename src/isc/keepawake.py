@@ -1,4 +1,4 @@
-"""Explicitly requested, time-limited systemd sleep/idle inhibitor.
+"""Explicitly requested systemd sleep/idle inhibitor with owner-death release.
 
 A local foreground CLI or tray owns the child and can cancel it. The
 inhibitor is NEVER started by a timer, hook, ISC mode change, or autostart.
@@ -14,12 +14,13 @@ import shlex
 import signal
 import subprocess
 import time
+import sys
+from pathlib import Path
 
 from .inhibitors import _COMMAND as LOGIND_INHIBITORS_COMMAND
 
 PRESETS_MINUTES = (15, 30, 60, 120, 240)
 INHIBITOR_EXECUTABLE = "/usr/bin/systemd-inhibit"
-SLEEP_EXECUTABLE = "/usr/bin/sleep"
 LOCK_OWNER = "Intelligent Sleep Controller"
 
 
@@ -42,7 +43,8 @@ def inhibitor_command(minutes: int | None, marker: str) -> tuple[str, ...]:
     return (
         INHIBITOR_EXECUTABLE, "--what=idle:sleep", "--mode=block",
         f"--who={LOCK_OWNER}", f"--why=ISC timed Keep Awake {marker}",
-        SLEEP_EXECUTABLE, "infinity" if minutes is None else str(minutes * 60),
+        sys.executable, "-B", "-m", "isc.keepawake_worker",
+        "forever" if minutes is None else str(minutes * 60),
     )
 
 
@@ -80,7 +82,7 @@ def _observed_lock(marker: str) -> bool:
 
 def _minimal_env() -> dict[str, str]:
     """Never leak unrelated tokens or credentials to an inhibitor child."""
-    return {
+    env = {
         name: os.environ[name]
         for name in (
             "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
@@ -88,6 +90,10 @@ def _minimal_env() -> dict[str, str]:
         )
         if name in os.environ
     }
+    # Local worker must import the exact ISC version that owns this lock.
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
 
 
 class KeepAwakeManager:
@@ -112,14 +118,14 @@ class KeepAwakeManager:
         marker = secrets.token_hex(8)
         argv = inhibitor_command(minutes, marker)
         if not all(os.access(program, os.X_OK) for program in (
-            INHIBITOR_EXECUTABLE, SLEEP_EXECUTABLE,
+            INHIBITOR_EXECUTABLE, sys.executable,
         )):
             raise KeepAwakeError("systemd_inhibit_or_sleep_unavailable")
         self.cancel()
         try:
             child = subprocess.Popen(
                 list(argv), env=_minimal_env(),
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 close_fds=True,
@@ -146,7 +152,7 @@ class KeepAwakeManager:
             raise
 
     def cancel(self) -> None:
-        """Terminate only our own verified session/process group."""
+        """Close the ownership pipe first; let logind release the native lock."""
         child = self._child
         if child is None:
             return
@@ -155,29 +161,30 @@ class KeepAwakeManager:
             self._marker = None
             self._expires_at = 0.0
             return
-        finished = False
+        completed = False
         try:
-            # start_new_session=True creates a group led by child.pid. Never
-            # guess or target groups whose identity is not exactly expected.
-            if os.getpgid(child.pid) != child.pid:
-                raise KeepAwakeError("inhibitor_process_identity_changed")
-            os.killpg(child.pid, signal.SIGTERM)
+            if child.stdin is None:
+                raise KeepAwakeError("inhibitor_owner_pipe_missing")
+            # No signal or guessed PID required in normal operation. The
+            # worker terminates on EOF and systemd-inhibit releases its lock.
+            if not child.stdin.closed:
+                child.stdin.close()
             try:
-                child.wait(timeout=2)
-                finished = True
+                child.wait(timeout=3)
+                completed = True
             except subprocess.TimeoutExpired:
-                if child.poll() is None and os.getpgid(child.pid) == child.pid:
-                    os.killpg(child.pid, signal.SIGKILL)
+                # Only target the exact process group explicitly created by
+                # ISC. Never kill a guessed or unrelated process.
+                if child.poll() is None:
+                    if os.getpgid(child.pid) != child.pid:
+                        raise KeepAwakeError("inhibitor_process_identity_changed")
+                    os.killpg(child.pid, signal.SIGTERM)
                 child.wait(timeout=2)
-                finished = True
-        except ProcessLookupError:
-            pass
-        except (PermissionError, OSError):
+                completed = True
+        except (OSError, PermissionError):
             raise KeepAwakeError("inhibitor_cancellation_unverified") from None
         finally:
-            # Retain the process handle after an uncertain cancellation so a
-            # later attempt cannot silently orphan the inhibitor.
-            if finished or child.poll() is not None:
+            if completed or child.poll() is not None:
                 self._child = None
                 self._marker = None
                 self._expires_at = 0.0
