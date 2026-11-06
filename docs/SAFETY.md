@@ -88,3 +88,12 @@ application-managed schedulers, remote requests and timers not loaded in
 memory may require separate adapters. Missing queries must remain UNKNOWN.
 No output from the read-only native observer may mark automatic sleep
 eligible; the ON executor remains unavailable.
+
+## Synthetic probes must not affect sleep readiness
+
+A synthetic hook diagnostic is counted separately and must not create
+or complete real work, refresh real-work timestamps, or establish scheduler
+coverage. Event source names on the Unix socket are same-user claims, not
+cryptographic proof of the originating application. The status view may
+display only aggregated counts and must never use their absence as proof
+of safe suspend eligibility.
