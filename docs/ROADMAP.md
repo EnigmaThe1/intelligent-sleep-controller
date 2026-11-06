@@ -26,6 +26,8 @@
 - [ ] Multi-session user-idle and active-seat discovery
 - [x] Read-only current-user Linux /proc candidate inventory
 - [x] Read-only process identity/descendant snapshots with PID-reuse protection and conservative lifecycle comparison
+- [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
+- [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [x] Read-only Linux session and loaded systemd timer discovery with UNKNOWN on failures
