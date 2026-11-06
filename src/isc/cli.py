@@ -110,6 +110,23 @@ def status() -> int:
             print("Source names are sender-claimed, not authenticated application identity.")
         else:
             print("Per-source observations: unavailable (receiver requires restart).")
+        if health.process_sample_age_seconds is None:
+            print("Background process census: UNKNOWN (no completed sample)")
+        elif health.process_roots is None:
+            print(
+                "Background process census: UNKNOWN "
+                f"(sample {health.process_sample_age_seconds}s ago)"
+            )
+        else:
+            print(
+                "Background process census (partial): "
+                f"roots={health.process_roots}, "
+                f"descendants={health.process_descendants}, "
+                f"visibility-races={health.process_visibility_races}, "
+                f"identity-changes={health.process_identity_changes}; "
+                f"sample age={health.process_sample_age_seconds}s"
+            )
+            print("Background census is not proof of job completion or sleep safety.")
         print("Coverage verified: NO (observations are not authority)")
     print("No system configuration has been changed.")
     return 0
