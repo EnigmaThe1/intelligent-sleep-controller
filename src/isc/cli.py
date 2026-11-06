@@ -149,6 +149,7 @@ def processes() -> int:
         print("ISC cannot assume unobserved processes are idle.")
     else:
         print(f"Linux process candidates (current user only): {scan.count}")
+        print(f"Undecodable process names (partial visibility): {scan.undecodable_names}")
         for item in scan.candidates[:40]:
             print(f"  pid={item.pid} name={item.name} state=UNKNOWN")
         if scan.count > 40:
@@ -454,6 +455,8 @@ def manual_power(*, confirm: bool, action: str | None) -> int:
     print("ISC MANUAL SUSPEND / SLEEP")
     print(f"System capability: {assessment.capability}")
     print(f"Known candidate processes (activity UNKNOWN): {assessment.candidate_processes}")
+    if assessment.undecodable_process_names:
+        print(f"Process names unreadable: {assessment.undecodable_process_names}; coverage incomplete.")
     print("Full workload coverage: NOT VERIFIED")
     if assessment.blockers:
         print("Request blocked:")
