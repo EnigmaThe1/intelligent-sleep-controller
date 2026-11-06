@@ -427,6 +427,15 @@ class TrayController:
                 f"Codex={health.codex_observations}; "
                 f"synthetic probes={health.synthetic_probe_events}"
             )
+        if health is not None and health.process_roots is not None:
+            monitoring_detail += (
+                f"\nPartial processes: roots={health.process_roots}, "
+                f"children={health.process_descendants}, "
+                f"visibility races={health.process_visibility_races}; "
+                f"sample age={health.process_sample_age_seconds}s"
+            )
+        elif health is not None:
+            monitoring_detail += "\nBackground process census: UNKNOWN"
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
