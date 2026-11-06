@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import time
 
 from .manual_power import assess_manual_suspend, request_dialog_suspend
 from .receiver import discover_monitor_socket, read_monitor_health
@@ -237,8 +238,12 @@ class TrayController:
             self._refreshing = False
         return True
 
-    def _refresh_profiles(self):
-        """Update existing items only; never rebuild a visible GTK submenu."""
+    def _refresh_profiles(self, *, force: bool = False):
+        """Bound OS subprocess queries, and never rebuild a GTK submenu."""
+        now = time.monotonic()
+        if not force and now - getattr(self, "_profiles_checked_at", -1e12) < 15:
+            return
+        self._profiles_checked_at = now
         try:
             state = power_profiles()
         except NativeControlError:
@@ -279,7 +284,7 @@ class TrayController:
             self._notice(
                 "Power profile unavailable", str(exc), error=True,
             )
-        self._refresh_profiles()
+        self._refresh_profiles(force=True)
 
     def _open_system_power(self, _item):
         try:
