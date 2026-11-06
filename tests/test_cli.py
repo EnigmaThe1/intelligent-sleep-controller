@@ -439,5 +439,40 @@ class CLITests(unittest.TestCase):
         self.assertIn("PREVIEW ONLY", output.getvalue())
 
 
+    @patch("isc.cli.inspect_user_service")
+    def test_user_service_status_is_read_only(self, inspect):
+        from isc.user_service import UserServiceStatus
+        inspect.return_value = UserServiceStatus(False, None, None)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["service"]), 0)
+        inspect.assert_called_once_with()
+        self.assertIn("Installed: NO", output.getvalue())
+
+    @patch("isc.cli.modify_user_service")
+    def test_user_service_requires_explicit_confirmation(self, modify):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["service", "--service", "enable"]), 2)
+        modify.assert_not_called()
+
+    @patch("isc.cli.modify_user_service")
+    def test_user_service_explicit_install_and_disable(self, modify):
+        from isc.user_service import UserServiceStatus
+        modify.return_value = UserServiceStatus(True, True, True)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(
+                main(["service", "--service", "enable", "--confirm"]), 0,
+            )
+        modify.assert_called_once_with("enable")
+        self.assertIn("Automatic suspension remains disabled.", output.getvalue())
+
+    @patch("isc.cli.monitor_service_loop", return_value=0)
+    def test_monitor_service_mode_uses_user_service_loop(self, run):
+        self.assertEqual(main(["monitor-service"]), 0)
+        run.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()
