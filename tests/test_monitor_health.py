@@ -122,6 +122,72 @@ class MonitorHealthTests(unittest.TestCase):
                     worker.join(timeout=2)
                     self.assertFalse(worker.is_alive())
 
+    def test_process_census_is_aggregate_and_fails_closed_when_stale(self):
+        from isc.background_observer import ProcessPulse
+        from unittest.mock import Mock, patch
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp) as monitor:
+                observed_at = time.monotonic()
+                monitor.update_process_pulse(ProcessPulse(
+                    roots=3, descendants=8,
+                    visibility_races=1, identity_changes=2,
+                    observed_at=observed_at,
+                ))
+                recipient = Mock()
+                monitor._reply_health(recipient)
+                status = json.loads(recipient.sendall.call_args.args[0])
+                self.assertEqual(status["process_roots"], 3)
+                self.assertEqual(status["process_descendants"], 8)
+                self.assertEqual(status["process_visibility_races"], 1)
+                self.assertEqual(status["process_identity_changes"], 2)
+                self.assertFalse(status["coverage_verified"])
+                self.assertNotIn("pid", status)
+                recipient.reset_mock()
+                with patch("isc.receiver.time.monotonic",
+                           return_value=observed_at + 121):
+                    monitor._reply_health(recipient)
+                stale = json.loads(recipient.sendall.call_args.args[0])
+                self.assertIsNone(stale["process_roots"])
+                self.assertIsNone(stale["process_descendants"])
+                self.assertEqual(stale["process_sample_age_seconds"], 121)
+
+    def test_process_census_failure_means_unknown_not_zero(self):
+        from isc.background_observer import ProcessPulse
+        from unittest.mock import Mock
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp) as monitor:
+                monitor.update_process_pulse(ProcessPulse(
+                    roots=None, descendants=None,
+                    visibility_races=None, identity_changes=None,
+                    observed_at=time.monotonic(),
+                ))
+                recipient = Mock()
+                monitor._reply_health(recipient)
+                failed = json.loads(recipient.sendall.call_args.args[0])
+                self.assertIsNone(failed["process_roots"])
+                self.assertIsNone(failed["process_visibility_races"])
+                self.assertFalse(failed["coverage_verified"])
+
+    def test_health_protocol_rejects_forged_process_counts(self):
+        from unittest.mock import MagicMock, patch
+        raw = {
+            "accepted": 0, "rejected": 0, "observed_active": 0,
+            "observed_waiting_human": 0, "observed_unknown": 0,
+            "last_event_age_seconds": None, "coverage_verified": False,
+            "claude_code_observations": 0, "codex_observations": 0,
+            "synthetic_probe_events": 0,
+            "process_roots": -1, "process_descendants": 3,
+            "process_visibility_races": 0, "process_identity_changes": 0,
+            "process_sample_age_seconds": 1,
+        }
+        conn = MagicMock()
+        conn.__enter__.return_value = conn
+        conn.recv.side_effect = [json.dumps(raw).encode(), b""]
+        with patch("isc.receiver.discover_monitor_socket",
+                   return_value=Path("/private/isc-monitor/events.sock")):
+            with patch("isc.receiver.socket.socket", return_value=conn):
+                self.assertIsNone(read_monitor_health())
+
     def test_legacy_running_receiver_is_readable_but_source_is_unknown(self):
         from unittest.mock import MagicMock, patch
         from isc.receiver import read_monitor_health
