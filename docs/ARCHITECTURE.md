@@ -261,3 +261,15 @@ stored or printed. Failed or ambiguous queries become UNKNOWN, never zero.
 The observer never marks schedule coverage complete or requests suspension.
 This is a precursor to explicit scheduler ownership and wake guarantees,
 not a substitute for them.
+
+## Sender-claimed source and synthetic diagnostic separation
+
+The MONITOR-only receiver reports bounded aggregate event counts for
+`claude_code` and `codex`, and a separate count for the reserved
+`IscSelfTest` diagnostic event. The diagnostic never enters the workload
+registry and does not refresh real-work activity timestamps. Other events
+remain conservative ACTIVE/UNKNOWN metadata. Source labels come from
+same-user hook senders and **are not authenticated as third-party application
+origins**. Old health messages remain readable with unknown per-source
+counts until the receiver is restarted. None of these counters qualifies
+the autonomous eligibility gate.
