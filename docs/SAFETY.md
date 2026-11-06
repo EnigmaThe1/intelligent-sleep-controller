@@ -79,3 +79,12 @@ unexpected parent death produces EOF and causes the worker to exit. Normal
 cancellation also closes that pipe. There is no unrestricted process-group
 kill. Tests run the worker without acquiring any real sleep inhibition.
 Live OS integration requires separate user-controlled testing.
+
+## Native scheduled-work discovery boundaries
+
+Enumerating login sessions or currently loaded systemd timers is not
+comprehensive scheduling coverage. Cron, at, user-space automation,
+application-managed schedulers, remote requests and timers not loaded in
+memory may require separate adapters. Missing queries must remain UNKNOWN.
+No output from the read-only native observer may mark automatic sleep
+eligible; the ON executor remains unavailable.
