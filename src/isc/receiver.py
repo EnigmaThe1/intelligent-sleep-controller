@@ -484,11 +484,11 @@ class LocalMonitor:
         with self._process_lock:
             pulse = self._process_pulse
         # A stale process census is no evidence of current activity or safety.
-        age = (
-            min(2**31, max(0, int(now - pulse.observed_at)))
-            if pulse is not None else None
-        )
-        fresh = age is not None and age <= 120
+        elapsed = max(0.0, now - pulse.observed_at) if pulse is not None else None
+        age = min(2**31, int(elapsed)) if elapsed is not None else None
+        # Compare the original floating-point duration; truncating to integer
+        # seconds first could wrongly treat a >120s sample as still fresh.
+        fresh = elapsed is not None and elapsed <= 120.0
         states = Counter(item.state.value for item in items)
         response = {
             "accepted": self.accepted,
