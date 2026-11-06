@@ -28,6 +28,7 @@ from .native_controls import (
     display_support, display_off, open_power_settings,
 )
 from .native_sleep import assess_native_sleep, request_terminal_sleep
+from .native_observers import read_native_activity
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -542,6 +543,23 @@ def monitor_service_control(operation: str | None, confirmed: bool) -> int:
 
 
 
+def native_activity_cli() -> int:
+    """Read-only snapshot of partial native scheduled-work/session evidence."""
+    data = read_native_activity()
+    print("ISC NATIVE WORK DISCOVERY (READ ONLY)")
+    def shown(value):
+        return "UNKNOWN" if value is None else str(value)
+    print("Linux login sessions observed: " + shown(data.sessions_observed))
+    print("Loaded systemd system timers: " + shown(data.loaded_system_timers))
+    print("Loaded systemd user timers: " + shown(data.loaded_user_timers))
+    print("Coverage: INCOMPLETE — loaded timers exclude cron, at, app schedulers,")
+    print("independent services, remote work and future timer activations.")
+    print("No automatic suspension permitted from this discovery.")
+    print("No system settings changed.")
+    return 0
+
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -549,7 +567,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity"),
         default="status",
     )
     parser.add_argument(
@@ -568,6 +586,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "native-activity":
+        return native_activity_cli()
     if args.command == "monitor-service":
         if args.service is not None:
             parser.error("--service is only valid with service")
