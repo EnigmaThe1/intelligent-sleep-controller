@@ -7,6 +7,7 @@ sanitised lifecycle metadata and cannot ever prove safe sleep eligibility.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 import json
 import errno
 import fcntl
@@ -151,6 +152,65 @@ def _prepare_monitor_directory(root: Path) -> Path:
 
 
 MAX_MESSAGE_BYTES = 1024
+MAX_HEALTH_BYTES = 512
+HEALTH_REQUEST = b"ISC-MONITOR-STATUS-V1"
+
+
+@dataclass(frozen=True)
+class MonitorHealth:
+    """Aggregate, read-only receiver health; NOT permission to suspend."""
+
+    accepted: int
+    rejected: int
+    observed_active: int
+    observed_waiting_human: int
+    observed_unknown: int
+    last_event_age_seconds: int | None
+    coverage_verified: bool = False
+
+
+def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
+    """Query the live same-user receiver without writing user data or logs."""
+    address = discover_monitor_socket(runtime_dir=runtime_dir)
+    if address is None:
+        return None
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.settimeout(0.5)
+            peer.connect(str(address))
+            peer.sendall(HEALTH_REQUEST)
+            peer.shutdown(socket.SHUT_WR)
+            raw = bytearray()
+            while len(raw) <= MAX_HEALTH_BYTES:
+                part = peer.recv(MAX_HEALTH_BYTES + 1 - len(raw))
+                if not part:
+                    break
+                raw.extend(part)
+            if len(raw) > MAX_HEALTH_BYTES:
+                return None
+        obj = json.loads(bytes(raw))
+        allowed = {
+            "accepted", "rejected", "observed_active",
+            "observed_waiting_human", "observed_unknown",
+            "last_event_age_seconds", "coverage_verified",
+        }
+        if not isinstance(obj, dict) or set(obj) != allowed:
+            return None
+        counts = ("accepted", "rejected", "observed_active",
+                  "observed_waiting_human", "observed_unknown")
+        if any(type(obj[k]) is not int or not 0 <= obj[k] <= 2**31 for k in counts):
+            return None
+        age = obj["last_event_age_seconds"]
+        if age is not None and (type(age) is not int or not 0 <= age <= 2**31):
+            return None
+        # Receiver observations are not an authoritative coverage proof.
+        if obj["coverage_verified"] is not False:
+            return None
+        return MonitorHealth(**obj)
+    except (OSError, ValueError, TypeError, UnicodeError):
+        return None
+
+
 _EVENT = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}\Z", re.ASCII)
 _FINGERPRINT = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 
@@ -244,6 +304,7 @@ class LocalMonitor:
             self.event_counts: Counter[tuple[str, str]] = Counter()
             self.accepted = 0
             self.rejected = 0
+            self._last_event_at: float | None = None
             self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._listener.bind(str(self.path))
             self.path.chmod(0o600)
@@ -300,6 +361,9 @@ class LocalMonitor:
                 if len(payload) > MAX_MESSAGE_BYTES:
                     self.rejected += 1
                     return
+                if bytes(payload) == HEALTH_REQUEST:
+                    self._reply_health(connection)
+                    return
                 fields = decode_observation(bytes(payload))
                 if fields is None:
                     self.rejected += 1
@@ -315,8 +379,30 @@ class LocalMonitor:
                 self.counts[state.value] += 1
                 self.event_counts[(source, event_name)] += 1
                 self.accepted += 1
+                self._last_event_at = time.monotonic()
             except (OSError, ValueError, socket.timeout):
                 self.rejected += 1
+
+    def _reply_health(self, connection: socket.socket) -> None:
+        """No session fingerprints, PIDs, commands or prompts leave receiver."""
+        now = time.monotonic()
+        items = self.registry.observed_work(now=now)
+        states = Counter(item.state.value for item in items)
+        response = {
+            "accepted": self.accepted,
+            "rejected": self.rejected,
+            "observed_active": states["active"] + states["waiting_external"],
+            "observed_waiting_human": states["waiting_human"],
+            "observed_unknown": states["unknown"],
+            "last_event_age_seconds": (
+                int(max(0, now - self._last_event_at))
+                if self._last_event_at is not None else None
+            ),
+            "coverage_verified": False,
+        }
+        packet = json.dumps(response, separators=(",", ":")).encode("ascii")
+        if len(packet) <= MAX_HEALTH_BYTES:
+            connection.sendall(packet)
 
     def run_for(self, duration_seconds: float) -> None:
         """Observe only; never change system services or suspend the machine."""
