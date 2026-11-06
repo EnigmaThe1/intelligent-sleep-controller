@@ -151,6 +151,32 @@ class MonitorHealthTests(unittest.TestCase):
                 self.assertIsNone(stale["process_descendants"])
                 self.assertEqual(stale["process_sample_age_seconds"], 121)
 
+    def test_process_aggregate_round_trip_over_private_health_socket(self):
+        from isc.background_observer import ProcessPulse
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp, advertise=True) as monitor:
+                worker = threading.Thread(
+                    target=monitor.run_for, args=(0.4,), daemon=True,
+                )
+                monitor.update_process_pulse(ProcessPulse(
+                    roots=3, descendants=8, visibility_races=1,
+                    identity_changes=0, observed_at=time.monotonic(),
+                ))
+                worker.start()
+                try:
+                    health = read_monitor_health(runtime_dir=tmp)
+                    self.assertIsNotNone(health)
+                    self.assertEqual(health.process_roots, 3)
+                    self.assertEqual(health.process_descendants, 8)
+                    self.assertEqual(health.process_visibility_races, 1)
+                    self.assertEqual(health.process_identity_changes, 0)
+                    self.assertIsNotNone(health.process_sample_age_seconds)
+                    self.assertFalse(health.coverage_verified)
+                    self.assertNotIn("pid", repr(health))
+                finally:
+                    worker.join(timeout=2)
+                    self.assertFalse(worker.is_alive())
+
     def test_process_census_failure_means_unknown_not_zero(self):
         from isc.background_observer import ProcessPulse
         from unittest.mock import Mock
