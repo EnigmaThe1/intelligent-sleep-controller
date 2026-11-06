@@ -21,7 +21,7 @@ from typing import Literal
 
 from .hook_plan import (
     EVENTS, MAX_CONFIG_BYTES, SUPPORTED_HOOK_SOURCES,
-    hook_command,
+    hook_command, is_isc_handler, group_has_isc_handler,
 )
 
 Operation = Literal["enable", "disable"]
@@ -57,8 +57,11 @@ def owned_group(source: str, event_name: str) -> dict:
 
 
 def _owned_groups(hooks: dict, source: str, event: str) -> int:
-    target = owned_group(source, event)
-    return sum(group == target for group in hooks.get(event, []))
+    """Count all ISC command handlers, including older async variants."""
+    return sum(
+        sum(is_isc_handler(handler, source) for handler in group["hooks"])
+        for group in hooks.get(event, [])
+    )
 
 
 def transform_hooks(data: dict, source: str, operation: Operation) -> tuple[dict, int]:
@@ -90,14 +93,23 @@ def transform_hooks(data: dict, source: str, operation: Operation) -> tuple[dict
                 altered += 1
         else:
             if present:
-                previous = hooks[event]
-                hooks[event] = [
-                    group for group in previous
-                    if group != owned_group(source, event)
-                ]
-                altered += present
-                if not hooks[event]:
+                remaining: list[dict] = []
+                for group in hooks[event]:
+                    kept = [
+                        handler for handler in group["hooks"]
+                        if not is_isc_handler(handler, source)
+                    ]
+                    if kept:
+                        amended = dict(group)
+                        amended["hooks"] = kept
+                        remaining.append(amended)
+                    # A group with only ISC handlers is dropped. Unrelated
+                    # handlers and group metadata are preserved verbatim.
+                if remaining:
+                    hooks[event] = remaining
+                else:
                     hooks.pop(event)
+                altered += present
     return result, altered
 
 
