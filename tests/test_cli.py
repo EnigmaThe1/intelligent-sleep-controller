@@ -524,5 +524,52 @@ class CLITests(unittest.TestCase):
         self.assertIn("delivery_unverified", output.getvalue())
 
 
+    @patch("isc.cli.time.sleep")
+    @patch("isc.cli.read_process_lineage")
+    def test_process_watch_reports_identity_and_partial_coverage(
+        self, probe, sleep,
+    ):
+        from isc.process_lifecycle import ProcessIdentity, ProcessLineage
+        continuing = ProcessIdentity(50, 10, 1, "codex")
+        new = ProcessIdentity(51, 11, 50, "python3")
+        probe.side_effect = [
+            ProcessLineage((continuing,), (), 0),
+            ProcessLineage((continuing,), (new,), 0),
+        ]
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["process-watch", "--seconds", "0.25"]), 0)
+        sleep.assert_called_once_with(0.25)
+        self.assertEqual(probe.call_count, 2)
+        text = output.getvalue()
+        self.assertIn("Identity continuing: 1; appeared: 1", text)
+        self.assertIn("Coverage verified: NO", text)
+        self.assertIn("disappearing process does NOT prove", text)
+        self.assertNotIn("task completed successfully", text)
+
+    @patch("isc.cli.time.sleep")
+    @patch("isc.cli.read_process_lineage", return_value=None)
+    def test_process_watch_unknown_does_not_claim_empty(self, probe, sleep):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["process-watch", "--seconds", "0"]), 2)
+        self.assertIn("UNKNOWN", output.getvalue())
+        self.assertIn("No sleep eligibility established.", output.getvalue())
+        sleep.assert_not_called()
+
+    @patch("isc.cli.time.sleep")
+    @patch("isc.cli.read_process_lineage")
+    def test_process_watch_refuses_excessive_observation_window(
+        self, probe, sleep,
+    ):
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["process-watch", "--seconds", "3600"]), 2)
+        probe.assert_not_called()
+        sleep.assert_not_called()
+        self.assertIn("between 0 and 60", output.getvalue())
+
+
+
 if __name__ == "__main__":
     unittest.main()
