@@ -131,3 +131,16 @@ A SubagentStop observation is not proof that all children have finished.
 Observed child activity remains unresolved until a trusted supervisor
 can verify it. Linux process names that cannot be decoded must be reported
 as incomplete visibility and never treated as proof of an idle machine.
+
+## Persistent MONITOR-only process census
+
+A separate periodic process observer may run while the independent MONITOR
+receiver is active. It must never block hook handling, send power-management
+requests or use process names/low activity as proof of safe suspension.
+It reads only constrained same-user `/proc/PID/stat` metadata and must not
+read command lines, environment variables, project files or socket payloads.
+The receiver exposes aggregate counts and freshness, not PIDs or process
+names. Scanner failures, missed intervals, and observations more than
+120 seconds old are UNKNOWN. Persistent counts of observed identity changes
+and enumeration races are diagnostic only. Process coverage remains
+`coverage_verified=False`, regardless of all observed counts.
