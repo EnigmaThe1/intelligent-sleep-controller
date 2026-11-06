@@ -59,12 +59,12 @@ def check_hook_delivery(source: str = "claude_code") -> HookTestResult:
     if before is None:
         return HookTestResult(source, "receiver_unavailable", None, None)
 
-    # A STOP event is conservatively UNKNOWN; never submit a synthetic
-    # completion or authorization to sleep.
+    # This reserved diagnostic event is excluded from observed work by
+    # updated receivers. Older receivers classify it UNKNOWN, never safe.
     payload = json.dumps(
         {
             "session_id": "isc-synthetic-probe-" + secrets.token_hex(12),
-            "hook_event_name": "Stop",
+            "hook_event_name": "IscSelfTest",
         },
         separators=(",", ":"),
     ).encode("ascii")
