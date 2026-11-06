@@ -59,3 +59,23 @@ Power-profile changes must go through the installed native
 the current machine. This is a deliberate user setting, not a sleep policy
 or an inferred safe-to-suspend signal. Native GNOME Power settings should
 be opened directly rather than replicated in ISC.
+
+## Monitor-only native user service
+
+A user-managed systemd service may be installed and enabled only through an
+explicit confirmed operation. It must never install system-wide privileges,
+overrule active inhibitors, alter power profiles, or trigger suspend.
+OFF disables monitoring work even if the supervising process remains alive.
+MONITOR accepts only privacy-limited metadata; reception does not establish
+trusted coverage of independent workloads. Supervisor restarts must use
+bounded backoff and must not overwrite an active or foreign runtime socket.
+Crash recovery is limited to the application's own private, stale socket.
+
+## Keep Awake owner-loss recovery
+
+A native systemd inhibitor is held only while the owner's child worker is
+alive. The worker watches its exclusive parent-owned stdin pipe, so an
+unexpected parent death produces EOF and causes the worker to exit. Normal
+cancellation also closes that pipe. There is no unrestricted process-group
+kill. Tests run the worker without acquiring any real sleep inhibition.
+Live OS integration requires separate user-controlled testing.
