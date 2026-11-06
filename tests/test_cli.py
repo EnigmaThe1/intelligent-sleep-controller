@@ -509,7 +509,7 @@ class CLITests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             self.assertEqual(main(["hook-self-test", "--source", "claude_code"]), 0)
         checker.assert_called_once_with("claude_code")
-        self.assertIn("Synthetic Stop observations are UNKNOWN", output.getvalue())
+        self.assertIn("Synthetic test events never establish actual workload activity.", output.getvalue())
         self.assertIn("No real agent launched", output.getvalue())
 
     @patch("isc.cli.check_hook_delivery")
