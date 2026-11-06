@@ -43,6 +43,38 @@ class ServiceTests(unittest.TestCase):
             serve_monitor(max_seconds=0.1)
         self.assertFalse((self.runtime / "isc-monitor").exists())
 
+    @patch("isc.service.BackgroundProcessObserver")
+    @patch("isc.service._read_preference",
+           side_effect=["monitor", "off"])
+    def test_indefinite_monitor_starts_and_closes_observer(
+        self, preference, observer,
+    ):
+        result = serve_monitor(max_seconds=0, quiet=True)
+        self.assertEqual(result.reason, "mode_off")
+        observer.assert_called_once()
+        observer.return_value.start.assert_called_once()
+        observer.return_value.close.assert_called_once()
+
+    @patch("isc.service.BackgroundProcessObserver")
+    def test_bounded_probe_does_not_launch_background_census(self, observer):
+        set_mode("monitor", config_root=self.root)
+        with contextlib.redirect_stdout(StringIO()):
+            result = serve_monitor(max_seconds=0.05, poll_seconds=0.01)
+        self.assertEqual(result.reason, "time_limit")
+        observer.assert_not_called()
+
+    @patch("isc.service.BackgroundProcessObserver")
+    @patch("isc.service._read_preference",
+           side_effect=["monitor", "off"])
+    def test_process_observer_start_failure_keeps_receiver_safe(
+        self, preference, observer,
+    ):
+        observer.return_value.start.side_effect = RuntimeError("thread failure")
+        result = serve_monitor(max_seconds=0, quiet=True)
+        self.assertEqual(result.reason, "mode_off")
+        observer.return_value.close.assert_not_called()
+        self.assertFalse((self.runtime / "isc-monitor").exists())
+
     def test_bounded_monitor_runs_and_cleans_socket(self):
         set_mode("monitor", config_root=self.root)
         with contextlib.redirect_stdout(StringIO()):
