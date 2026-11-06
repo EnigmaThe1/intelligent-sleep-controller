@@ -93,6 +93,23 @@ def _load_existing(target: Path) -> dict:
     return data
 
 
+def is_isc_handler(handler: object, source: str) -> bool:
+    """Recognise current and legacy ISC command handlers without guessing.
+
+    Exact command identity is required; optional async/timeout fields may
+    differ across versions. Other commands are never ISC-owned.
+    """
+    return (
+        isinstance(handler, dict)
+        and handler.get("type") == "command"
+        and handler.get("command") == hook_command(source)
+    )
+
+
+def group_has_isc_handler(group: dict, source: str) -> bool:
+    return any(is_isc_handler(h, source) for h in group.get("hooks", ()))
+
+
 def build_hook_plan(source: str, target: str | Path) -> HookPlan:
     """Inspect only; never mutate the target JSON or reveal hook commands."""
     if source not in SUPPORTED_HOOK_SOURCES:
@@ -100,17 +117,12 @@ def build_hook_plan(source: str, target: str | Path) -> HookPlan:
     target = Path(target)
     data = _load_existing(target)
     hooks = data["hooks"]
-    command = hook_command(source)
     configured = tuple(sorted(hooks))
     already: list[str] = []
     proposed: list[str] = []
     for event in EVENTS:
         groups = hooks.get(event, [])
-        if any(
-            item.get("type") == "command" and item.get("command") == command
-            for group in groups
-            for item in group["hooks"]
-        ):
+        if any(group_has_isc_handler(group, source) for group in groups):
             already.append(event)
         else:
             proposed.append(event)
