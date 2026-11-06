@@ -22,7 +22,7 @@ import struct
 import tempfile
 import time
 
-from .events import hook_observation, interpret
+from .events import _HOOK_EVENTS, hook_observation, interpret
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
 
@@ -152,6 +152,7 @@ def _prepare_monitor_directory(root: Path) -> Path:
 
 
 MAX_MESSAGE_BYTES = 1024
+MAX_CONNECTION_SECONDS = 0.7
 MAX_HEALTH_BYTES = 512
 HEALTH_REQUEST = b"ISC-MONITOR-STATUS-V1"
 
@@ -361,7 +362,7 @@ class LocalMonitor:
     def _handle_one(self) -> None:
         connection, _ = self._listener.accept()
         with connection:
-            connection.settimeout(0.2)
+            deadline = time.monotonic() + MAX_CONNECTION_SECONDS
             try:
                 credential_option = getattr(socket, "SO_PEERCRED", None)
                 if not isinstance(credential_option, int):
@@ -377,6 +378,11 @@ class LocalMonitor:
                     return
                 payload = bytearray()
                 while len(payload) <= MAX_MESSAGE_BYTES:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        self.rejected += 1
+                        return
+                    connection.settimeout(min(0.2, remaining))
                     chunk = connection.recv(MAX_MESSAGE_BYTES + 1 - len(payload))
                     if not chunk:
                         break
@@ -406,7 +412,12 @@ class LocalMonitor:
                     now=time.monotonic(), ttl_seconds=30.0
                 )
                 self.counts[state.value] += 1
-                self.event_counts[(source, event_name)] += 1
+                # Unknown vendor events share a fixed bucket, so a same-UID
+                # sender cannot create unbounded distinct counter keys.
+                key = (source, event_name)
+                if key not in _HOOK_EVENTS:
+                    key = (source, "unrecognised")
+                self.event_counts[key] += 1
                 self._source_observations[source] += 1
                 self.accepted += 1
                 self._last_event_at = time.monotonic()
