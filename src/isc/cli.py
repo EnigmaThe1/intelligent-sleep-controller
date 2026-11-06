@@ -11,6 +11,7 @@ from typing import Sequence
 from . import __version__
 from .gnome import read_gnome_idle_ms
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
+from .hook_diagnostics import check_hook_delivery
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
 from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
@@ -273,6 +274,23 @@ def send_hook(*, source: str, socket_path: str | None = None) -> int:
         else:
             send_observation(socket_path, observation)
     return 0
+
+
+def hook_self_test(source: str) -> int:
+    """Exercise synthetic hook delivery; does not invoke an AI application."""
+    result = check_hook_delivery(source)
+    print("ISC SYNTHETIC HOOK DELIVERY TEST")
+    print("Source: " + source)
+    print("Outcome: " + result.status)
+    if result.before_accepted is not None:
+        print("Receiver accepted before: " + str(result.before_accepted))
+    if result.after_accepted is not None:
+        print("Receiver accepted after: " + str(result.after_accepted))
+    print("No real agent launched. No hook settings changed.")
+    print("Synthetic Stop observations are UNKNOWN, not completion.")
+    print("Other concurrent events may affect the aggregate counter.")
+    print("This test does not verify third-party hook invocation or full work coverage.")
+    return 0 if result.delivered else 2
 
 
 def hook_plan() -> int:
@@ -567,7 +585,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "hook-self-test"),
         default="status",
     )
     parser.add_argument(
@@ -655,6 +673,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return processes()
     if args.command == "check":
         return check()
+    if args.command == "hook-self-test":
+        if args.source is None:
+            parser.error("hook-self-test requires --source")
+        return hook_self_test(args.source)
     if args.command == "hook-probe":
         if args.source is None:
             parser.error("hook-probe requires --source")
