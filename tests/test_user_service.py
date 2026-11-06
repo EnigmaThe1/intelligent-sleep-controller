@@ -42,6 +42,61 @@ class UserServiceTests(unittest.TestCase):
         self.assertNotIn("ExecStart=/bin/sh", text)
 
     @patch("isc.user_service._run_systemd", return_value=True)
+    def test_standard_0755_systemd_directories_install_without_chmod(self, run):
+        """Normal pre-existing user systemd dirs must not be treated as unsafe."""
+        sysdir = self.root / "systemd"
+        sysdir.mkdir(mode=0o755)
+        self.unit.parent.mkdir(mode=0o755)
+        sysdir.chmod(0o755)
+        self.unit.parent.chmod(0o755)
+        before = (sysdir.stat().st_mode & 0o777,
+                  self.unit.parent.stat().st_mode & 0o777)
+        self.assertEqual(before, (0o755, 0o755))
+        result = modify_user_service("enable", config_root=self.root)
+        self.assertTrue(result.installed)
+        self.assertEqual(self.unit.read_bytes(), unit_contents())
+        self.assertEqual(
+            (sysdir.stat().st_mode & 0o777,
+             self.unit.parent.stat().st_mode & 0o777),
+            before,
+        )
+        self.assertIn(("enable", "--now", UNIT_NAME),
+                      [x.args for x in run.call_args_list])
+
+    @patch("isc.user_service._run_systemd")
+    def test_group_writable_existing_systemd_directory_refused(self, run):
+        sysdir = self.root / "systemd"
+        sysdir.mkdir(mode=0o775)
+        sysdir.chmod(0o775)
+        with self.assertRaisesRegex(UserServiceError, "unsafe_unit_directory"):
+            modify_user_service("enable", config_root=self.root)
+        self.assertFalse(self.unit.exists())
+        self.assertEqual(sysdir.stat().st_mode & 0o777, 0o775)
+        run.assert_not_called()
+
+    @patch("isc.user_service._run_systemd")
+    def test_world_writable_user_unit_directory_refused(self, run):
+        sysdir = self.root / "systemd"
+        sysdir.mkdir(mode=0o700)
+        self.unit.parent.mkdir(mode=0o777)
+        self.unit.parent.chmod(0o777)
+        with self.assertRaisesRegex(UserServiceError, "unsafe_unit_directory"):
+            modify_user_service("enable", config_root=self.root)
+        self.assertFalse(self.unit.exists())
+        run.assert_not_called()
+
+    @patch("isc.user_service._run_systemd")
+    def test_symlinked_systemd_directory_refused_without_mutation(self, run):
+        foreign = self.root / "elsewhere"
+        foreign.mkdir(mode=0o700)
+        (self.root / "systemd").symlink_to(foreign, target_is_directory=True)
+        with self.assertRaisesRegex(UserServiceError, "unsafe_unit_directory"):
+            modify_user_service("enable", config_root=self.root)
+        self.assertTrue((self.root / "systemd").is_symlink())
+        self.assertFalse(self.unit.exists())
+        run.assert_not_called()
+
+    @patch("isc.user_service._run_systemd", return_value=True)
     def test_explicit_enable_and_disable_touch_only_owned_unit(self, run):
         status = modify_user_service("enable", config_root=self.root)
         self.assertTrue(status.installed)
