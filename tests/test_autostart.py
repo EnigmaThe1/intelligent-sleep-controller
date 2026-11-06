@@ -39,6 +39,43 @@ class AutostartTests(unittest.TestCase):
         self.assertTrue(stopped.changed)
         self.assertFalse(self.target.exists())
 
+    def test_autostart_can_be_disabled_after_interpreter_move(self):
+        self.target.parent.mkdir(mode=0o700)
+        old = desktop_contents(
+            interpreter="/opt/old-isc/bin/python3",
+            source_root="/srv/old-isc/src",
+        )
+        self.target.write_bytes(old)
+        self.target.chmod(0o600)
+        self.assertEqual(
+            inspect_autostart(config_root=self.root).state, "enabled",
+        )
+        with self.assertRaisesRegex(
+            AutostartError, "autostart_path_migration_requires_disable_first",
+        ):
+            modify_autostart("enable", config_root=self.root)
+        self.assertEqual(self.target.read_bytes(), old)
+        disabled = modify_autostart("disable", config_root=self.root)
+        self.assertEqual(disabled.state, "disabled")
+        self.assertFalse(self.target.exists())
+
+    def test_modified_legacy_autostart_not_mistaken_for_isc(self):
+        self.target.parent.mkdir(mode=0o700)
+        content = desktop_contents(
+            interpreter="/opt/old-isc/bin/python3",
+            source_root="/srv/old-isc/src",
+        ).replace(b"Terminal=false", b"Terminal=true")
+        self.target.write_bytes(content)
+        self.target.chmod(0o600)
+        self.assertEqual(
+            inspect_autostart(config_root=self.root).state, "unmanaged",
+        )
+        with self.assertRaisesRegex(
+            AutostartError, "existing_startup_entry_not_owned",
+        ):
+            modify_autostart("disable", config_root=self.root)
+        self.assertEqual(self.target.read_bytes(), content)
+
     def test_repeated_enable_and_disable_are_noop(self):
         modify_autostart("enable", config_root=self.root)
         inode = self.target.stat().st_ino
