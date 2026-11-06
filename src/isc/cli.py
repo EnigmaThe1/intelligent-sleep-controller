@@ -16,7 +16,7 @@ from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
 from .processes import read_process_candidates
-from .receiver import LocalMonitor, send_observation, send_discovered_observation
+from .receiver import LocalMonitor, send_observation, send_discovered_observation, read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
 from .service import MonitorUnavailable, serve_monitor
 from .manual_power import assess_manual_suspend, request_manual_suspend
@@ -28,6 +28,10 @@ from .native_controls import (
     display_support, display_off, open_power_settings,
 )
 from .native_sleep import assess_native_sleep, request_terminal_sleep
+from .user_service import (
+    UserServiceError, inspect_user_service, modify_user_service,
+)
+from .supervisor import monitor_service_loop
 
 
 def _probe(argv: list[str]) -> str:
@@ -53,14 +57,14 @@ def status() -> int:
     print(f"Intelligent Sleep Controller {__version__}")
     print("Implementation: foundation (no automatic suspend)")
     print("ISC automatic suspend: NOT IMPLEMENTED")
-    print("ISC service installation: NOT IMPLEMENTED")
+    print("ISC user-service supervision: OPTIONAL (never enabled automatically)")
     try:
         current = read_mode()
         print(f"ISC operator preference: {current.mode.upper()}" +
               (" (stored)" if current.configured else " (safe default)"))
     except ModeConfigError:
         print("ISC operator preference: OFF (configuration invalid; fail-safe)")
-    print("ISC ON control and background service: NOT IMPLEMENTED")
+    print("ISC ON automatic suspension: NOT IMPLEMENTED")
     try:
         with open("/sys/power/mem_sleep", encoding="utf-8") as stream:
             power_modes = stream.read().strip()
@@ -79,6 +83,17 @@ def status() -> int:
         )
     )
     print("GNOME user idle: " + _idle_text())
+    health = read_monitor_health()
+    if health is None:
+        print("ISC live receiver health: unavailable")
+    else:
+        print(f"ISC live receiver events: {health.accepted} accepted, {health.rejected} rejected")
+        print(
+            f"Observed activity: active={health.observed_active}, "
+            f"waiting-human={health.observed_waiting_human}, "
+            f"unknown={health.observed_unknown}"
+        )
+        print("Coverage verified: NO (observations are not authority)")
     print("No system configuration has been changed.")
     return 0
 
@@ -500,6 +515,33 @@ def power_settings_cli() -> int:
     return 0
 
 
+def monitor_service_control(operation: str | None, confirmed: bool) -> int:
+    """Optional native systemd user-service management; no power action."""
+    try:
+        if operation is None:
+            info = inspect_user_service()
+            print("ISC MONITOR USER SERVICE")
+            print("Installed: " + ("YES" if info.installed else "NO"))
+            print("Enabled: " + str(info.enabled))
+            print("Active: " + str(info.active))
+            print("MONITOR service never requests automatic suspension.")
+            return 0
+        if not confirmed:
+            print("No changes made. Explicit --confirm is required.")
+            return 2
+        result = modify_user_service(operation)
+        print("ISC monitor service " + operation + " requested.")
+        print("Installed: " + str(result.installed))
+        print("Enabled: " + str(result.enabled))
+        print("Active: " + str(result.active))
+        print("Automatic suspension remains disabled.")
+        return 0
+    except UserServiceError as exc:
+        print("ISC user service operation refused: " + str(exc))
+        return 2
+
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -507,7 +549,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service"),
         default="status",
     )
     parser.add_argument(
@@ -520,11 +562,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize a selected change or manual suspend")
     parser.add_argument("--startup", choices=("enable", "disable"), help="User login tray startup control; requires autostart command")
+    parser.add_argument("--service", choices=("enable", "disable"), help="Manage ISC-owned systemd user monitor service; requires service command")
     parser.add_argument("--minutes", type=int, choices=PRESETS_MINUTES, help="Keep Awake duration in minutes")
     parser.add_argument("--forever", action="store_true", help="Keep Awake until cancelled while this terminal is running")
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "monitor-service":
+        if args.service is not None:
+            parser.error("--service is only valid with service")
+        return monitor_service_loop()
+    if args.command == "service":
+        if args.startup is not None:
+            parser.error("--startup is only valid for autostart")
+        return monitor_service_control(args.service, args.confirm)
+    if args.service is not None:
+        parser.error("--service is only valid for service")
     if args.command == "keep-awake":
         if args.forever and args.minutes is not None:
             parser.error("choose either --forever or --minutes")
