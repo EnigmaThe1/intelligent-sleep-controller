@@ -128,7 +128,7 @@ class ProfileSubmenuRegressionTests(unittest.TestCase):
             PowerProfiles("balanced", ("power-saver", "balanced")),
         ]
         c._refresh_profiles()
-        c._refresh_profiles()
+        c._refresh_profiles(force=True)
         self.assertEqual(ids, tuple(id(x) for x in c._profile_items.values()))
         self.assertFalse(c._profile_items["performance"].get_visible())
         self.assertEqual(c._profile_items["balanced"].get_label(), "● Balanced")
@@ -143,6 +143,23 @@ class ProfileSubmenuRegressionTests(unittest.TestCase):
         self.assertEqual(c.profiles_item.get_label(), "Power Profile: unavailable")
         self.assertTrue(c._profile_unavailable.get_visible())
         self.assertTrue(all(not x.get_visible() for x in c._profile_items.values()))
+
+
+
+    @patch("isc.tray.power_profiles")
+    def test_profile_queries_throttled_during_regular_refresh(self, read):
+        from isc.native_controls import PowerProfiles
+        c = self._controller()
+        read.return_value = PowerProfiles(
+            "balanced", ("power-saver", "balanced", "performance"),
+        )
+        with patch("isc.tray.time.monotonic", return_value=100.0):
+            c._refresh_profiles()
+            c._refresh_profiles()
+        read.assert_called_once_with()
+        with patch("isc.tray.time.monotonic", return_value=116.0):
+            c._refresh_profiles()
+        self.assertEqual(read.call_count, 2)
 
 
 
