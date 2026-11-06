@@ -339,6 +339,48 @@ suspends. The presence of sessions is not proof of current human activity.
 The result must never set `coverage_complete` or
 `scheduled_work_safe` in ISC's eligibility policy.
 
+## Reliability hardening (MONITOR-only)
+
+The monitor now limits in-memory lease storage and event-name cardinality.
+Expired leases are retained temporarily for diagnostics and eventually
+pruned. **Loss of tracking history is sticky UNKNOWN**, not a completed
+workload or permission to suspend. Source and diagnostic counters do not
+store prompts, commands, filenames, or raw session identifiers.
+
+Each Unix-socket client has an overall time budget; a slow sender cannot
+indefinitely occupy the single-threaded receiver. Receiver accept errors
+are handled without treating them as successful work observations.
+
+ISC hook planning and installation now recognise the same exact ISC command
+across supported legacy async/timeout variants. Installation is idempotent
+and disabling removes only ISC command handlers, leaving unrelated handlers
+and group metadata. Existing agent hooks are not modified by upgrading ISC.
+
+A systemd user unit or GNOME autostart entry created by an older ISC
+interpreter/source path can still be **disabled** after the installation is
+moved, provided its entire expected structure is preserved. Enabling a
+legacy entry with a stale path is refused until the operator deliberately
+disables the previous entry and installs the current one. Foreign or
+modified units are not removed.
+
+Keep Awake cancellation now handles a second subprocess timeout without
+propagating an uncaught TimeoutExpired exception. Any escalation is restricted
+to the verified ISC-owned process group.
+
+Linux process discovery reports the count of process names that could not
+be decoded. A single invalid UTF-8 process name no longer invalidates the
+entire candidate inventory. Incomplete visibility is explicitly disclosed
+and remains unsuitable for automatic sleep eligibility.
+
+Subagent start/stop observations retain an unverified child-work flag
+within the session lease. A single child stop does not prove all child work
+is finished. Source events still cannot authenticate their originating
+application. Automatic ON remains disabled.
+
+Existing private hook-configuration backups are **not automatically
+deleted**. Safe backup rotation remains a future operator-approved
+maintenance feature; do not remove recovery evidence during upgrades.
+
 ## Read-only process lifetime observation
 
 ISC can compare two bounded, same-user Linux process snapshots without
