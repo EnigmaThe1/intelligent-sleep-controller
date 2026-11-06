@@ -104,6 +104,24 @@ class ReceiverTests(unittest.TestCase):
             self.assertNotIn("SECRET_SESSION", repr(server.event_counts))
             self.assertEqual(len(server.event_counts), 2)
 
+    def test_subagent_start_and_stop_do_not_erase_unverified_child_work(self):
+        from isc.policy import WorkState
+        with LocalMonitor(runtime_dir=self.base) as monitor:
+            session = "same-parent-task"
+            events = ["UserPromptSubmit", "SubagentStart", "SubagentStop", "PostToolUse"]
+            for event in events:
+                self.assertTrue(send_observation(
+                    monitor.path,
+                    observed(event, source="claude_code", session=session),
+                ))
+                monitor.run_for(0.01)
+            self.assertEqual(monitor.accepted, len(events))
+            work = monitor.registry.observed_work(now=__import__("time").monotonic())
+            self.assertEqual(len(work), 1)
+            self.assertEqual(work[0].state, WorkState.ACTIVE)
+            self.assertTrue(work[0].active_children)
+            self.assertFalse(monitor.registry.tracking_history_lost)
+
     def test_active_and_stop_events_are_separate(self):
         with LocalMonitor(runtime_dir=self.base) as server:
             self.assertTrue(send_observation(server.path, observed("PreToolUse")))
