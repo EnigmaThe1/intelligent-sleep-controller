@@ -33,6 +33,7 @@ class ProcessCandidate:
 class ProcessScan:
     candidates: tuple[ProcessCandidate, ...]
     """Candidates owned by the scanning user. These remain unclassified."""
+    undecodable_names: int = 0
 
     @property
     def count(self) -> int:
@@ -60,6 +61,7 @@ def read_process_candidates(
     ):
         return None
     candidates: list[ProcessCandidate] = []
+    undecodable_names = 0
     try:
         with os.scandir(proc_root) as listing:
             for item in listing:
@@ -70,8 +72,15 @@ def read_process_candidates(
                         continue
                     if item.stat(follow_symlinks=False).st_uid != uid:
                         continue
-                    with open(Path(item.path) / "comm", encoding="utf-8") as handle:
-                        name = handle.read(256).rstrip("\n")
+                    with open(Path(item.path) / "comm", "rb") as handle:
+                        raw = handle.read(256)
+                    try:
+                        name = raw.decode("utf-8").rstrip("\n")
+                    except UnicodeDecodeError:
+                        # Linux process names are byte strings. Keep scanning
+                        # but explicitly report incomplete name visibility.
+                        undecodable_names += 1
+                        continue
                 except FileNotFoundError:
                     # /proc entries legitimately disappear during enumeration.
                     continue
@@ -83,4 +92,4 @@ def read_process_candidates(
                     candidates.append(ProcessCandidate(int(item.name), name))
     except (OSError, ValueError):
         return None
-    return ProcessScan(tuple(sorted(candidates)))
+    return ProcessScan(tuple(sorted(candidates)), undecodable_names)
