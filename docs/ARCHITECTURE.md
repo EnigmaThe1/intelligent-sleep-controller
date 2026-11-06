@@ -251,3 +251,13 @@ The same native-control backend serves CLI and tray actions:
 
 The ISC automatic ON action remains disabled. New manual capabilities
 are not evidence that the autonomous workload-coverage requirement is met.
+
+## Linux-native session and timer observation
+
+A read-only native observer requests login sessions and loaded timer-unit
+counts via `loginctl` and `systemctl`. Input is checked with bounded
+subprocesses and parsed into only aggregate counts; no private names are
+stored or printed. Failed or ambiguous queries become UNKNOWN, never zero.
+The observer never marks schedule coverage complete or requests suspension.
+This is a precursor to explicit scheduler ownership and wake guarantees,
+not a substitute for them.
