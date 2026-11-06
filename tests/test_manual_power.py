@@ -64,6 +64,19 @@ class ManualPowerTests(unittest.TestCase):
         self.assertFalse(result.request_possible)
         self.assertIn("blocking_sleep_inhibitor_present", result.blockers)
 
+    @patch("isc.manual_power.read_process_candidates",
+           return_value=ProcessScan((ProcessCandidate(42, "claude"),), 1))
+    @patch("isc.manual_power.read_inhibitors", return_value=())
+    @patch("isc.manual_power.can_suspend", return_value="yes")
+    def test_undecodable_comm_is_uncertainty_not_fatal_in_manual_preflight(
+        self, cap, locks, scan,
+    ):
+        result = assess_manual_suspend()
+        self.assertTrue(result.request_possible)
+        self.assertEqual(result.candidate_processes, 1)
+        self.assertEqual(result.undecodable_process_names, 1)
+        self.assertFalse(result.workload_coverage_verified)
+
     @patch("isc.manual_power.read_process_candidates", return_value=None)
     @patch("isc.manual_power.read_inhibitors", return_value=())
     @patch("isc.manual_power.can_suspend", return_value="yes")
