@@ -400,8 +400,17 @@ different executable names. It uses both the PID and the kernel's process
 start-time ticks from `/proc/PID/stat` so a recycled PID is not treated as
 the same continuing job. The report distinguishes continuing, newly observed,
 disappeared, and PID-reused processes; it does not publish process arguments
-or session details. Sampling is performed only when explicitly requested and
-the observation window is limited to 60 seconds.
+or session details. The standalone `process-watch` command is explicitly
+invoked and limited to a 60-second observation window.
+
+When ISC owns the **persistent MONITOR** receiver, a separate lightweight
+read-only thread also samples the process table every 30 seconds. This does not
+run when the operator selects OFF, and the thread exits when the monitor stops.
+The socket receiver remains responsive while a scan runs. `isc status`
+reports only aggregate root/descendant counts, observed visibility races,
+identity transitions and sample age. Failed or stale scans return **UNKNOWN**;
+the user can distinguish missing data from an observed count of zero.
+This service integration never starts or terminates an application.
 
 **Critical limitation:** Disappearance is not proof of task completion or
 successful output; a process may crash, fork, change identity, or disappear
