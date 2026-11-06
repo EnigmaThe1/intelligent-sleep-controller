@@ -65,7 +65,6 @@ def parse_hook_payload(source: str, payload: bytes) -> HookObservation | None:
         or any(ord(char) < 32 or ord(char) == 127 for char in session_id)
     ):
         return None
-    kind = hook_observation(source, event_name, "opaque").kind
     state = interpret(hook_observation(source, event_name, "opaque")).state
     # Never include the raw ID in a persisted record or output.
     fingerprint = hashlib.sha256(
