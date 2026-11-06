@@ -271,5 +271,35 @@ class ReceiverTests(unittest.TestCase):
             alias.unlink()
 
 
+    def test_unrecognised_event_names_share_single_bounded_bucket(self):
+        with LocalMonitor(runtime_dir=self.base) as server:
+            for n in range(40):
+                self.assertTrue(send_observation(
+                    server.path, observed(f"PrivateVariant{n}", session=f"example-{n}")
+                ))
+                server.run_for(0.002)
+            self.assertEqual(server.accepted, 40)
+            self.assertEqual(server.event_counts[("codex", "unrecognised")], 40)
+            self.assertEqual(len(server.event_counts), 1)
+
+    def test_slow_client_cannot_monopolise_receiver_indefinitely(self):
+        from isc.receiver import MAX_CONNECTION_SECONDS
+        import threading
+        import time
+        with LocalMonitor(runtime_dir=self.base) as server:
+            slow = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            slow.connect(str(server.path))
+            slow.sendall(b" ")
+            start = time.monotonic()
+            try:
+                server.run_for(MAX_CONNECTION_SECONDS + 0.35)
+            finally:
+                slow.close()
+            self.assertLess(time.monotonic() - start, MAX_CONNECTION_SECONDS + 0.7)
+            self.assertEqual(server.accepted, 0)
+            self.assertGreaterEqual(server.rejected, 1)
+
+
+
 if __name__ == "__main__":
     unittest.main()
