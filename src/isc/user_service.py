@@ -65,12 +65,22 @@ def _root(config_root: str | Path | None) -> Path:
     return root
 
 
-def _safe_dir(path: Path, *, private: bool = True) -> None:
-    st = path.lstat()
+def _safe_dir(path: Path) -> None:
+    """Respect existing native XDG/systemd permissions.
+
+    Systemd user-unit directories normally permit group/other reads and
+    traversal (0755). They need to be user-owned and non-writable by others,
+    not artificially private (0700). Never chmod or replace an existing path.
+    lstat rejects symlinks as well as unexpected file types.
+    """
+    try:
+        st = path.lstat()
+    except OSError:
+        raise UserServiceError("unit_directory_unavailable") from None
     if (
         not stat.S_ISDIR(st.st_mode)
         or st.st_uid != os.getuid()
-        or st.st_mode & (0o077 if private else 0o022)
+        or st.st_mode & 0o022
     ):
         raise UserServiceError("unsafe_unit_directory")
 
@@ -126,7 +136,7 @@ def inspect_user_service(
     if unit.is_symlink():
         raise UserServiceError("unsafe_unit_file")
     if unit.exists():
-        _safe_dir(root, private=False)
+        _safe_dir(root)
         _safe_dir(root / "systemd")
         _safe_dir(unit.parent)
         if _read_owned(unit) != unit_contents():
@@ -162,7 +172,7 @@ def modify_user_service(
     target = parent / UNIT_NAME
     if action == "enable":
         if not status.installed:
-            _safe_dir(root, private=False)
+            _safe_dir(root)
             systemd = root / "systemd"
             systemd.mkdir(mode=0o700, exist_ok=True)
             _safe_dir(systemd)
