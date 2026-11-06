@@ -255,5 +255,49 @@ class KeepAwakeTests(unittest.TestCase):
 
 
 
+    @patch("isc.keepawake.os.killpg")
+    @patch("isc.keepawake.os.getpgid", return_value=4321)
+    @patch("isc.keepawake._observed_lock", return_value=True)
+    @patch("isc.keepawake.os.access", return_value=True)
+    @patch("isc.keepawake.subprocess.Popen")
+    def test_second_timeout_escalates_only_owned_group(
+        self, spawn, access, observed, getpgid, killpg,
+    ):
+        manager, child = self._working_manager()
+        child.stdin.closed = False
+        child.wait.side_effect = [
+            subprocess.TimeoutExpired("inhibit", 3),
+            subprocess.TimeoutExpired("inhibit", 2),
+            0,
+        ]
+        spawn.return_value = child
+        manager.start(15)
+        manager.cancel()
+        self.assertEqual(killpg.call_count, 2)
+        self.assertEqual(killpg.call_args_list[0].args, (4321, signal.SIGTERM))
+        self.assertEqual(killpg.call_args_list[1].args, (4321, signal.SIGKILL))
+
+    @patch("isc.keepawake.os.killpg")
+    @patch("isc.keepawake.os.getpgid", return_value=4321)
+    @patch("isc.keepawake._observed_lock", return_value=True)
+    @patch("isc.keepawake.os.access", return_value=True)
+    @patch("isc.keepawake.subprocess.Popen")
+    def test_final_timeout_raises_controlled_error_not_raw_timeout(
+        self, spawn, access, observed, getpgid, killpg,
+    ):
+        manager, child = self._working_manager()
+        child.stdin.closed = False
+        child.wait.side_effect = subprocess.TimeoutExpired("inhibit", 1)
+        spawn.return_value = child
+        manager.start(15)
+        with self.assertRaisesRegex(
+            KeepAwakeError, "inhibitor_cancellation_unverified",
+        ):
+            manager.cancel()
+        self.assertIs(manager._child, child)
+        self.assertEqual(killpg.call_count, 2)
+
+
+
 if __name__ == "__main__":
     unittest.main()
