@@ -31,6 +31,7 @@ class SuspendAssessment:
     blockers: tuple[str, ...]
     candidate_processes: int | None
     workload_coverage_verified: bool = False
+    undecodable_process_names: int = 0
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,7 @@ def assess_manual_suspend() -> SuspendAssessment:
         capability=capability,
         blockers=tuple(blockers),
         candidate_processes=scan.count if scan is not None else None,
+        undecodable_process_names=(scan.undecodable_names if scan is not None else 0),
     )
 
 
