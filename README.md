@@ -339,6 +339,30 @@ suspends. The presence of sessions is not proof of current human activity.
 The result must never set `coverage_complete` or
 `scheduled_work_safe` in ISC's eligibility policy.
 
+## Read-only process lifetime observation
+
+ISC can compare two bounded, same-user Linux process snapshots without
+reading process arguments, environment, open files, project content, or logs:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc process-watch --seconds 5
+```
+
+The scanner selects a **limited set of recognizable work process names** and
+follows their visible same-user child processes, including children with
+different executable names. It uses both the PID and the kernel's process
+start-time ticks from `/proc/PID/stat` so a recycled PID is not treated as
+the same continuing job. The report distinguishes continuing, newly observed,
+disappeared, and PID-reused processes; it does not publish process arguments
+or session details. Sampling is performed only when explicitly requested and
+the observation window is limited to 60 seconds.
+
+**Critical limitation:** Disappearance is not proof of task completion or
+successful output; a process may crash, fork, change identity, or disappear
+between samples. Visibility to other users' work and unobserved processes is
+not complete. Neither successful polling nor an empty candidate list means
+automatic suspension is safe. ON remains disabled.
+
 ## Design and scope
 
 - [Architecture and task-state contract](docs/ARCHITECTURE.md)
