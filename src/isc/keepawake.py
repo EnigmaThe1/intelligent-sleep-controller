@@ -179,9 +179,18 @@ class KeepAwakeManager:
                     if os.getpgid(child.pid) != child.pid:
                         raise KeepAwakeError("inhibitor_process_identity_changed")
                     os.killpg(child.pid, signal.SIGTERM)
-                child.wait(timeout=2)
+                try:
+                    child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    # The child has not acknowledged SIGTERM. Verify the
+                    # specific still-owned process group before escalation.
+                    if child.poll() is None:
+                        if os.getpgid(child.pid) != child.pid:
+                            raise KeepAwakeError("inhibitor_process_identity_changed")
+                        os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=1)
                 completed = True
-        except (OSError, PermissionError):
+        except (OSError, PermissionError, subprocess.TimeoutExpired):
             raise KeepAwakeError("inhibitor_cancellation_unverified") from None
         finally:
             if completed or child.poll() is not None:
