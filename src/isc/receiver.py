@@ -167,6 +167,10 @@ class MonitorHealth:
     observed_unknown: int
     last_event_age_seconds: int | None
     coverage_verified: bool = False
+    # Optional additive fields: older running receivers return None, not zero.
+    claude_code_observations: int | None = None
+    codex_observations: int | None = None
+    synthetic_probe_events: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -194,15 +198,32 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             "observed_waiting_human", "observed_unknown",
             "last_event_age_seconds", "coverage_verified",
         }
-        if not isinstance(obj, dict) or set(obj) != allowed:
+        extension = {
+            "claude_code_observations", "codex_observations",
+            "synthetic_probe_events",
+        }
+        if not isinstance(obj, dict) or set(obj) not in (allowed, allowed | extension):
             return None
         counts = ("accepted", "rejected", "observed_active",
                   "observed_waiting_human", "observed_unknown")
+        if extension <= obj.keys():
+            counts += (
+                "claude_code_observations", "codex_observations",
+                "synthetic_probe_events",
+            )
         if any(type(obj[k]) is not int or not 0 <= obj[k] <= 2**31 for k in counts):
             return None
         age = obj["last_event_age_seconds"]
         if age is not None and (type(age) is not int or not 0 <= age <= 2**31):
             return None
+        # Reject inconsistent counts instead of claiming spurious delivery.
+        if extension <= obj.keys():
+            if (
+                obj["claude_code_observations"]
+                + obj["codex_observations"]
+                + obj["synthetic_probe_events"] > obj["accepted"]
+            ):
+                return None
         # Receiver observations are not an authoritative coverage proof.
         if obj["coverage_verified"] is not False:
             return None
@@ -302,6 +323,8 @@ class LocalMonitor:
             self.registry = WorkRegistry()
             self.counts: Counter[str] = Counter()
             self.event_counts: Counter[tuple[str, str]] = Counter()
+            self._source_observations: Counter[str] = Counter()
+            self._synthetic_probe_events = 0
             self.accepted = 0
             self.rejected = 0
             self._last_event_at: float | None = None
@@ -369,6 +392,12 @@ class LocalMonitor:
                     self.rejected += 1
                     return
                 source, event_name, session_fingerprint = fields
+                if event_name == "IscSelfTest":
+                    # Diagnostic requests prove only local relay reachability;
+                    # they are excluded from real workload observations.
+                    self._synthetic_probe_events += 1
+                    self.accepted += 1
+                    return
                 state = interpret(
                     hook_observation(source, event_name, session_fingerprint)
                 ).state
@@ -378,6 +407,7 @@ class LocalMonitor:
                 )
                 self.counts[state.value] += 1
                 self.event_counts[(source, event_name)] += 1
+                self._source_observations[source] += 1
                 self.accepted += 1
                 self._last_event_at = time.monotonic()
             except (OSError, ValueError, socket.timeout):
@@ -399,6 +429,11 @@ class LocalMonitor:
                 if self._last_event_at is not None else None
             ),
             "coverage_verified": False,
+            # These are sender-claimed sources; peer UID is verified, but a
+            # same-user process can spoof an application. Never authorize sleep.
+            "claude_code_observations": self._source_observations["claude_code"],
+            "codex_observations": self._source_observations["codex"],
+            "synthetic_probe_events": self._synthetic_probe_events,
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
         if len(packet) <= MAX_HEALTH_BYTES:
