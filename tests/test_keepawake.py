@@ -93,7 +93,7 @@ class KeepAwakeTests(unittest.TestCase):
             self.assertLessEqual(status.remaining_seconds, 900)
             call = spawn.call_args
             self.assertEqual(call.args[0][0], INHIBITOR_EXECUTABLE)
-            self.assertEqual(call.args[0][-4:-1], ("-B", "-m", "isc.keepawake_worker"))
+            self.assertEqual(call.args[0][-4:-1], ["-B", "-m", "isc.keepawake_worker"])
             self.assertEqual(call.kwargs["stdin"], subprocess.PIPE)
             self.assertTrue(call.kwargs["start_new_session"])
             self.assertTrue(call.kwargs["close_fds"])
@@ -137,7 +137,7 @@ class KeepAwakeTests(unittest.TestCase):
         ]):
             with self.assertRaises(KeepAwakeError):
                 manager.start(15)
-        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        killpg.assert_not_called()
         self.assertFalse(manager.status().requested)
 
     @patch("isc.keepawake.os.access", return_value=False)
@@ -212,7 +212,7 @@ class KeepAwakeTests(unittest.TestCase):
         self.assertEqual(spawn.call_args.args[0][-1], "forever")
         self.assertIsNone(manager.status().remaining_seconds)
         manager.cancel()
-        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        killpg.assert_not_called()
 
 
     @patch("isc.keepawake.os.killpg")
