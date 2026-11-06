@@ -282,6 +282,33 @@ The source code and CI tests alone cannot validate hardware suspend/resume,
 systemd user-service integration, or the reliability of every third-party
 application adapter. Those require explicit host-level verification.
 
+## Diagnosing optional coding-agent hook delivery
+
+`isc hook-plan` lists whether ISC hook groups match their current
+configuration. A configured hook does **not** establish that an agent has
+actually executed it or that an event reached ISC.
+
+To test the local sender and the running MONITOR receiver without starting an
+agent or editing its configuration:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc hook-self-test --source claude_code
+```
+
+This sends a **synthetic Stop event** through ISC's normal silent
+`send-hook` command, then checks the receiver's aggregate accepted counter.
+Synthetic Stop is conservatively UNKNOWN, never proof of task completion.
+The test does not run Claude Code, request power management, create files or
+install hooks. It may briefly add one synthetic observation to in-memory
+receiver counters. Concurrent real events may increment the same counter,
+so a successful test confirms a working local route but **not** actual
+third-party hook execution or complete workload coverage.
+
+If the local route works but live event counts remain zero during genuine
+agent use, inspect the application-specific hook execution and environment
+before changing configuration; do not treat this as evidence of idleness.
+Codex hooks remain optional and are never enabled automatically.
+
 ## Native scheduled-work and session discovery (read only)
 
 A separate diagnostic command queries standard OS interfaces and returns
