@@ -499,5 +499,30 @@ class CLITests(unittest.TestCase):
         self.assertIn("Coverage: INCOMPLETE", output.getvalue())
 
 
+    @patch("isc.cli.check_hook_delivery")
+    def test_hook_self_test_uses_synthetic_diagnostic(self, checker):
+        from isc.hook_diagnostics import HookTestResult
+        checker.return_value = HookTestResult(
+            "claude_code", "receiver_counter_incremented", 0, 1,
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["hook-self-test", "--source", "claude_code"]), 0)
+        checker.assert_called_once_with("claude_code")
+        self.assertIn("Synthetic Stop observations are UNKNOWN", output.getvalue())
+        self.assertIn("No real agent launched", output.getvalue())
+
+    @patch("isc.cli.check_hook_delivery")
+    def test_hook_self_test_refuses_unverified_delivery(self, checker):
+        from isc.hook_diagnostics import HookTestResult
+        checker.return_value = HookTestResult(
+            "claude_code", "delivery_unverified", 2, 2,
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["hook-self-test", "--source", "claude_code"]), 2)
+        self.assertIn("delivery_unverified", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
