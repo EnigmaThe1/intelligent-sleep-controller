@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+import re
 from pathlib import Path
 import shlex
 import stat
@@ -43,17 +44,24 @@ class UnsafeHookConfiguration(ValueError):
     """No configuration content is exposed in errors or printed summaries."""
 
 
+_ABS_PATH = re.compile(r"/[A-Za-z0-9_/.-]+\\Z", re.ASCII)
+
+
+def _render_hook_command(source: str, interpreter: str, source_root: str) -> str:
+    return (
+        "PYTHONDONTWRITEBYTECODE=1 "
+        f"PYTHONPATH={shlex.quote(source_root)} "
+        f"{shlex.quote(interpreter)} -m isc send-hook "
+        f"--source {shlex.quote(source)}"
+    )
+
+
 def hook_command(source: str) -> str:
     """Use absolute interpreter/source paths, independent of agent cwd."""
     if source not in SUPPORTED_HOOK_SOURCES:
         raise ValueError("unsupported_source")
     src_root = Path(__file__).resolve().parents[1]
-    return (
-        "PYTHONDONTWRITEBYTECODE=1 "
-        f"PYTHONPATH={shlex.quote(str(src_root))} "
-        f"{shlex.quote(sys.executable)} -m isc send-hook "
-        f"--source {shlex.quote(source)}"
-    )
+    return _render_hook_command(source, sys.executable, str(src_root))
 
 
 def _load_existing(target: Path) -> dict:
@@ -94,16 +102,41 @@ def _load_existing(target: Path) -> dict:
 
 
 def is_isc_handler(handler: object, source: str) -> bool:
-    """Recognise current and legacy ISC command handlers without guessing.
+    """Recognise the exact current or legacy ISC command without executing it.
 
-    Exact command identity is required; optional async/timeout fields may
-    differ across versions. Other commands are never ISC-owned.
+    Interpreter/source paths may change across installs. Require a complete
+    canonical command shape, not a substring or a claimed owner marker.
+    Shell metacharacters and path-like inputs outside a strict whitelist
+    are never treated as ISC-owned legacy handlers.
     """
-    return (
-        isinstance(handler, dict)
-        and handler.get("type") == "command"
-        and handler.get("command") == hook_command(source)
-    )
+    if source not in SUPPORTED_HOOK_SOURCES:
+        return False
+    if not isinstance(handler, dict) or handler.get("type") != "command":
+        return False
+    command = handler.get("command")
+    if not isinstance(command, str):
+        return False
+    if command == hook_command(source):
+        return True
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if len(parts) != 8:
+        return False
+    if parts[0] != "PYTHONDONTWRITEBYTECODE=1":
+        return False
+    if not parts[1].startswith("PYTHONPATH="):
+        return False
+    source_root = parts[1][len("PYTHONPATH="):]
+    interpreter = parts[2]
+    if (
+        _ABS_PATH.fullmatch(source_root) is None
+        or _ABS_PATH.fullmatch(interpreter) is None
+        or parts[3:] != ["-m", "isc", "send-hook", "--source", source]
+    ):
+        return False
+    return command == _render_hook_command(source, interpreter, source_root)
 
 
 def group_has_isc_handler(group: dict, source: str) -> bool:
