@@ -10,8 +10,8 @@ import os
 import re
 import subprocess
 
-_UNIT = re.compile(r"[A-Za-z0-9_.:@\\-]+\\.timer\\Z", re.ASCII)
-_SESSION = re.compile(r"[A-Za-z0-9_.-]{1,64}\\Z", re.ASCII)
+_UNIT = re.compile(r"[A-Za-z0-9_.:@\-]+\.timer\Z", re.ASCII)
+_SESSION = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z", re.ASCII)
 
 
 @dataclass(frozen=True)
