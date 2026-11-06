@@ -15,8 +15,20 @@ class PowerProfiles:
     available: tuple[str, ...]
 
 def _run(args):
+    # Do not forward unrelated agent tokens or application secrets.
+    env = {
+        name: os.environ[name]
+        for name in (
+            "PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
+            "LANG", "LC_ALL", "TZ", "DISPLAY", "XAUTHORITY",
+        )
+        if name in os.environ
+    }
     try:
-        return subprocess.run(args, check=False, text=True, capture_output=True, timeout=5)
+        return subprocess.run(
+            args, env=env, check=False, text=True,
+            capture_output=True, timeout=5,
+        )
     except (OSError, subprocess.TimeoutExpired):
         raise NativeControlError("native_command_unavailable") from None
 
