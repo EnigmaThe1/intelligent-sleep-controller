@@ -19,10 +19,12 @@ import select
 import socket
 import stat
 import struct
+from threading import Lock
 import tempfile
 import time
 
 from .events import _HOOK_EVENTS, hook_observation, interpret
+from .background_observer import ProcessPulse
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
 
@@ -172,6 +174,12 @@ class MonitorHealth:
     claude_code_observations: int | None = None
     codex_observations: int | None = None
     synthetic_probe_events: int | None = None
+    # Absent or stale observations remain UNKNOWN (None), never zero.
+    process_roots: int | None = None
+    process_descendants: int | None = None
+    process_visibility_races: int | None = None
+    process_identity_changes: int | None = None
+    process_sample_age_seconds: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -203,7 +211,12 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             "claude_code_observations", "codex_observations",
             "synthetic_probe_events",
         }
-        if not isinstance(obj, dict) or set(obj) not in (allowed, allowed | extension):
+        process_extension = {
+            "process_roots", "process_descendants", "process_visibility_races",
+            "process_identity_changes", "process_sample_age_seconds",
+        }
+        versions = (allowed, allowed | extension, allowed | extension | process_extension)
+        if not isinstance(obj, dict) or set(obj) not in versions:
             return None
         counts = ("accepted", "rejected", "observed_active",
                   "observed_waiting_human", "observed_unknown")
@@ -217,6 +230,24 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
         age = obj["last_event_age_seconds"]
         if age is not None and (type(age) is not int or not 0 <= age <= 2**31):
             return None
+        if process_extension <= obj.keys():
+            for key in process_extension:
+                value = obj[key]
+                if value is not None and (
+                    type(value) is not int or not 0 <= value <= 2**31
+                ):
+                    return None
+            sample_age = obj["process_sample_age_seconds"]
+            counts_present = (
+                obj["process_roots"] is not None,
+                obj["process_descendants"] is not None,
+                obj["process_visibility_races"] is not None,
+                obj["process_identity_changes"] is not None,
+            )
+            if len(set(counts_present)) != 1:
+                return None
+            if sample_age is None and any(counts_present):
+                return None
         # Reject inconsistent counts instead of claiming spurious delivery.
         if extension <= obj.keys():
             if (
@@ -329,6 +360,8 @@ class LocalMonitor:
             self.accepted = 0
             self.rejected = 0
             self._last_event_at: float | None = None
+            self._process_lock = Lock()
+            self._process_pulse: ProcessPulse | None = None
             self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._listener.bind(str(self.path))
             self.path.chmod(0o600)
@@ -437,10 +470,25 @@ class LocalMonitor:
             except (OSError, ValueError, socket.timeout):
                 self.rejected += 1
 
+    def update_process_pulse(self, pulse: ProcessPulse) -> None:
+        """Publish aggregate background evidence, never raw PIDs or names."""
+        if not isinstance(pulse, ProcessPulse) or pulse.coverage_verified:
+            raise ValueError("invalid_process_pulse")
+        with self._process_lock:
+            self._process_pulse = pulse
+
     def _reply_health(self, connection: socket.socket) -> None:
         """No session fingerprints, PIDs, commands or prompts leave receiver."""
         now = time.monotonic()
         items = self.registry.observed_work(now=now)
+        with self._process_lock:
+            pulse = self._process_pulse
+        # A stale process census is no evidence of current activity or safety.
+        age = (
+            min(2**31, max(0, int(now - pulse.observed_at)))
+            if pulse is not None else None
+        )
+        fresh = age is not None and age <= 120
         states = Counter(item.state.value for item in items)
         response = {
             "accepted": self.accepted,
@@ -458,6 +506,15 @@ class LocalMonitor:
             "claude_code_observations": self._source_observations["claude_code"],
             "codex_observations": self._source_observations["codex"],
             "synthetic_probe_events": self._synthetic_probe_events,
+            "process_roots": pulse.roots if fresh else None,
+            "process_descendants": pulse.descendants if fresh else None,
+            "process_visibility_races": (
+                pulse.visibility_races if fresh else None
+            ),
+            "process_identity_changes": (
+                pulse.identity_changes if fresh else None
+            ),
+            "process_sample_age_seconds": age,
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
         if len(packet) <= MAX_HEALTH_BYTES:
