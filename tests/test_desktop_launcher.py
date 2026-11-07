@@ -66,6 +66,7 @@ class DesktopLauncherTests(unittest.TestCase):
         self.file.parent.mkdir(mode=0o700)
         body = b"[Desktop Entry]\nName=PRIVATE OTHER APP\n"
         self.file.write_bytes(body)
+        self.file.chmod(0o600)
         self.assertEqual(inspect_launcher(data_root=self.root).state, "foreign")
         for operation in ("install", "remove"):
             with self.assertRaisesRegex(
