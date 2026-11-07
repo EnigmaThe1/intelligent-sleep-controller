@@ -162,6 +162,14 @@ def _prepare_root(root: Path) -> None:
     """Create missing default XDG directories; never touch foreign entries."""
     # Validate existing path components without traversing a symlink.
     parent = root.parent
+    # The normal ~/.local directory need not exist on a fresh Linux account.
+    # Only create that single conventional parent after validating HOME.
+    if (
+        parent == Path.home() / ".local"
+        and not parent.exists() and not parent.is_symlink()
+    ):
+        _safe_directory(Path.home())
+        parent.mkdir(mode=0o755)
     _safe_directory(parent)
     if not root.exists() and not root.is_symlink():
         root.mkdir(mode=0o755)
