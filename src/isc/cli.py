@@ -37,6 +37,7 @@ from .native_controls import (
 )
 from .native_sleep import assess_native_sleep, request_terminal_sleep
 from .native_observers import read_native_activity
+from .session_census import read_session_census
 from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_timer_associations
 from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
@@ -736,6 +737,24 @@ def monitor_service_control(operation: str | None, confirmed: bool) -> int:
 
 
 
+def sessions_cli() -> int:
+    """Show only bounded logind session counts, never user/session identities."""
+    census = read_session_census()
+    print("ISC LOGIN SESSION CENSUS — READ ONLY")
+    if census is None:
+        print("Session activity: UNKNOWN (list unavailable or ambiguous)")
+    else:
+        print(
+            f"Sessions listed: {census.listed}; active: {census.active}; "
+            f"inactive: {census.inactive}; unknown: {census.unknown}"
+        )
+    print("No per-session GNOME idle or inhibitor coverage established.")
+    print("Other sessions and independent workloads must not be assumed idle.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No sessions or system configuration changed.")
+    return 2 if census is None else 0
+
+
 def native_activity_cli() -> int:
     """Read-only snapshot of partial native scheduled-work/session evidence."""
     data = read_native_activity()
@@ -973,7 +992,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1023,6 +1042,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return timer_service_watch_cli(seconds=args.seconds)
     if args.command == "native-activity":
         return native_activity_cli()
+    if args.command == "sessions":
+        return sessions_cli()
     if args.command == "monitor-service":
         if args.service is not None:
             parser.error("--service is only valid with service")
