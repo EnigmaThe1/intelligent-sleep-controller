@@ -31,6 +31,7 @@
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
 - [x] Read-only logind inhibitor inventory
 - [x] Read-only current GNOME session IsInhibited(4/8) flags (not complete multi-session coverage)
+- [x] Include GNOME suspend/idle flag results in read-only check; UNKNOWN or inhibition blocks eligibility, other sessions remain unverified
 - [x] Read-only Linux session and loaded systemd timer discovery with UNKNOWN on failures
 - [x] On-demand, bounded read-only systemd timer waiting/running/activating service census without leaking unit names
 - [x] On-demand, bounded read-only installed systemd timer-file census (separate from loaded units, no scheduler completeness claim)
