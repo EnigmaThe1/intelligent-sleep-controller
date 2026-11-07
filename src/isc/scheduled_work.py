@@ -15,10 +15,10 @@ import re
 
 from .native_observers import _capture
 
-_UNIT = re.compile(r"[A-Za-z0-9_.:@-]+\.(timer|service)\Z", re.ASCII)
+_UNIT = re.compile(r"[A-Za-z0-9_.:@+\\-]{1,255}\.(timer|service)\Z", re.ASCII)
 _MARKERS = frozenset(("●", "○", "×", "↻"))
 _LOAD = frozenset(("loaded", "not-found", "error", "bad-setting", "masked"))
-_ACTIVE = frozenset(("active", "inactive", "activating", "deactivating", "failed", "reloading"))
+_ACTIVE = frozenset(("active", "inactive", "activating", "deactivating", "failed", "reloading", "maintenance", "refreshing"))
 
 
 @dataclass(frozen=True)
