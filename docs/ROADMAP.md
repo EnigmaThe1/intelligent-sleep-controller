@@ -31,6 +31,8 @@
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
 - [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
 - [x] Read-only Linux session and loaded systemd timer discovery with UNKNOWN on failures
+- [x] On-demand, bounded read-only systemd timer waiting/running/activating service census without leaking unit names
+- [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
 - [x] Explicit foreground MONITOR supervisor with persistent OFF shutdown and safe invalid-config failure
