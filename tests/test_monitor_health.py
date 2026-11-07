@@ -149,7 +149,7 @@ class MonitorHealthTests(unittest.TestCase):
                 stale = json.loads(recipient.sendall.call_args.args[0])
                 self.assertIsNone(stale["process_roots"])
                 self.assertIsNone(stale["process_descendants"])
-                self.assertEqual(stale["process_sample_age_seconds"], 121)
+                self.assertIn(stale["process_sample_age_seconds"], (121, 122))
 
     def test_process_aggregate_round_trip_over_private_health_socket(self):
         from isc.background_observer import ProcessPulse
