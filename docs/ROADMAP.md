@@ -39,6 +39,7 @@
 - [x] Read-only systemd cgroup TasksCurrent presence for timer-linked services; unknown and zero remain non-authoritative
 - [x] Bounded two-snapshot aggregate task-count comparison with unknown-state handling; unchanged totals are not lifecycle proof
 - [x] Bounded identity-aware two-sample timer-linked service observation; only aggregate transitions returned, no job completion inference
+- [x] Best-effort background systemd timer-linked service observer in continuous MONITOR receiver with fresh, partial aggregate health; never authorises sleep
 - [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
