@@ -275,6 +275,7 @@ def check() -> int:
     """Explain a conservative real-host readiness check without permitting sleep."""
     idle_ms = read_gnome_idle_ms()
     locks = read_inhibitors()
+    gnome_flags = read_gnome_inhibit_flags()
     scan = read_process_candidates()
     blockers: tuple[str, ...]
     if locks is None:
@@ -285,6 +286,16 @@ def check() -> int:
             for index, lock in enumerate(locks)
             if lock.blocks_automatic_sleep
         )
+
+    # GNOME is one session only. Missing flags must NOT be treated as clear.
+    # Even both flags FALSE cannot establish all-session inhibitor coverage.
+    gnome_blockers = tuple(
+        name for name, inhibited in (
+            ("gnome_suspend_unverified_or_inhibited", gnome_flags.suspend_inhibited),
+            ("gnome_idle_unverified_or_inhibited", gnome_flags.idle_inhibited),
+        ) if inhibited is not False
+    )
+    blockers += gnome_blockers
 
     # There is not yet an authoritative supervisor or timer/wake verifier.
     # Both must remain False even when no running jobs are discovered.
@@ -313,7 +324,15 @@ def check() -> int:
         print(f"Process candidates requiring lifecycle verification: {scan.count}")
     print("Application workload coverage: NOT VERIFIED")
     print("Scheduled work and wake safety: NOT VERIFIED")
-    print("GNOME session inhibitors: NOT VERIFIED")
+    def _flag(value: bool | None) -> str:
+        return "UNKNOWN" if value is None else ("YES" if value else "NO")
+
+    print(
+        "GNOME session inhibitors (current session): "
+        f"suspend={_flag(gnome_flags.suspend_inhibited)}, "
+        f"idle={_flag(gnome_flags.idle_inhibited)}"
+    )
+    print("GNOME multi-session inhibitor coverage: NOT VERIFIED")
     print("Verdict: DO NOT AUTO-SUSPEND")
     for reason in result.reasons:
         print(f"  - {reason}")
