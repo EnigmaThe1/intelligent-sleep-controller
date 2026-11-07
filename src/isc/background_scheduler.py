@@ -84,7 +84,7 @@ class BackgroundSchedulerObserver:
             else:
                 # Never retain raw names beyond the previous sampling interval.
                 changes = [
-                    compare_service_task_snapshots(a, b)
+                    compare_service_task_snapshots(a, b, require_invocation=True)
                     for a, b in zip(previous, current)
                 ]
                 services = sum(len(scope.observed) for scope in current if scope)
@@ -94,14 +94,16 @@ class BackgroundSchedulerObserver:
                     for scope in current if scope
                 )
                 uncertain = sum(
-                    sum(int(count is None or not group)
-                        for _, group, count in scope.observed)
+                    sum(int(count is None or not group or (
+                        scope.invocations is None
+                        or dict(scope.invocations).get(name) is None))
+                        for name, group, count in scope.observed)
                     for scope in current if scope
                 )
                 if all(change is not None for change in changes):
                     transitions: int | None = min(2**31, sum(
                         c.appeared + c.disappeared + c.gained_tasks
-                        + c.lost_reported_tasks
+                        + c.lost_reported_tasks + c.changed_invocations
                         for c in changes if c is not None
                     ))
                     uncertain_transitions: int | None = min(2**31, sum(
