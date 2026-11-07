@@ -62,7 +62,8 @@ class DesktopLauncherTests(unittest.TestCase):
         )
 
     def test_unknown_entry_not_deleted_or_overwritten(self):
-        self.file.parent.mkdir(parents=True, mode=0o700)
+        self.root.mkdir(mode=0o700)
+        self.file.parent.mkdir(mode=0o700)
         body = b"[Desktop Entry]\nName=PRIVATE OTHER APP\n"
         self.file.write_bytes(body)
         self.assertEqual(inspect_launcher(data_root=self.root).state, "foreign")
@@ -99,7 +100,8 @@ class DesktopLauncherTests(unittest.TestCase):
         self.assertTrue(self.file.exists())
 
     def test_legacy_interpreter_path_can_be_removed_not_silently_replaced(self):
-        self.file.parent.mkdir(parents=True)
+        self.root.mkdir(mode=0o700)
+        self.file.parent.mkdir(mode=0o700)
         old = launcher_contents(
             interpreter="/opt/old-python/bin/python3",
             source_root="/srv/playground_dev/old-isc/src",
