@@ -37,6 +37,7 @@
 - [x] On-demand read-only systemd states for distinct timer-linked services (not proof of task completion or child-work quiescence)
 - [x] Read-only systemd MainPID/ControlPID presence for timer-linked services (no process identity disclosure; zero does not prove quiescence)
 - [x] Read-only systemd cgroup TasksCurrent presence for timer-linked services; unknown and zero remain non-authoritative
+- [x] Bounded two-snapshot aggregate task-count comparison with unknown-state handling; unchanged totals are not lifecycle proof
 - [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
