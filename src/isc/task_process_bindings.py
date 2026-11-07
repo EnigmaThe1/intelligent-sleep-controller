@@ -17,6 +17,7 @@ from .process_lifecycle import ProcessIdentity, ProcessLineage
 
 _TOKEN = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _MAX_TASKS = 256
+_MAX_OBSERVATION_GAP_SECONDS = 90.0
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,15 @@ class TaskProcessBindings:
         key = (owner_token, task_token)
         if key in self._tasks:
             raise ValueError("task_binding_already_exists")
+        # An identical kernel identity cannot be exclusively attributed to
+        # different tasks without independent trusted-owner verification.
+        if any(
+            (item.root_pid, item.root_start_ticks)
+            == (root.pid, root.start_ticks)
+            for item in self._tasks.values()
+        ):
+            self._history_lost = True
+            raise ValueError("process_identity_already_bound")
         if len(self._tasks) >= _MAX_TASKS:
             self._history_lost = True
             raise ValueError("task_binding_capacity_exceeded")
@@ -89,9 +99,14 @@ class TaskProcessBindings:
         if (type(now) not in (int, float)
                 or not math.isfinite(now) or now < 0):
             raise ValueError("invalid_observation_time")
-        if self._last_scan is not None and now < self._last_scan:
-            self._history_lost = True
-            snapshot = None
+        if self._last_scan is not None:
+            # A missed interval can conceal children spawning and detaching.
+            # Retain UNKNOWN even if the root remains visible afterward.
+            if now - self._last_scan > _MAX_OBSERVATION_GAP_SECONDS:
+                self._history_lost = True
+            if now < self._last_scan:
+                self._history_lost = True
+                snapshot = None
         self._last_scan = float(now)
         if snapshot is None or not isinstance(snapshot, ProcessLineage):
             self._history_lost = True
