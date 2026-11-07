@@ -144,3 +144,13 @@ names. Scanner failures, missed intervals, and observations more than
 120 seconds old are UNKNOWN. Persistent counts of observed identity changes
 and enumeration races are diagnostic only. Process coverage remains
 `coverage_verified=False`, regardless of all observed counts.
+
+## Native timer and service state observations
+
+Aggregate `systemctl` timer/service states are diagnostic, not authoritative
+job-lifecycle evidence. Waiting timers can coexist with running tasks;
+inactive services can have detached descendants. Timer-to-service ownership,
+unloaded timers, cron/at, in-app schedulers, independent workers, other-user
+work and wake capabilities remain unverified. Missing or unparsable native
+unit output is UNKNOWN, not zero. No timer or service counts may set
+`coverage_verified` or authorize automatic suspend.
