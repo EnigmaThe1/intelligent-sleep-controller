@@ -186,6 +186,7 @@ class MonitorHealth:
     scheduler_uncertain: int | None = None
     scheduler_transitions: int | None = None
     scheduler_sample_age_seconds: int | None = None
+    scheduler_uncertain_transitions: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -229,6 +230,8 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
         versions = (
             allowed, allowed | extension, allowed | extension | process_extension,
             allowed | extension | process_extension | scheduler_extension,
+            allowed | extension | process_extension | scheduler_extension
+            | {"scheduler_uncertain_transitions"},
         )
         if not isinstance(obj, dict) or set(obj) not in versions:
             return None
@@ -263,7 +266,8 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             if sample_age is None and any(counts_present):
                 return None
         if scheduler_extension <= obj.keys():
-            for key in scheduler_extension:
+            for key in scheduler_extension | ({"scheduler_uncertain_transitions"}
+                                               & obj.keys()):
                 value = obj[key]
                 if value is not None and (
                     type(value) is not int or not 0 <= value <= 2**31
@@ -569,6 +573,9 @@ class LocalMonitor:
             "scheduler_uncertain": scheduler.uncertain if scheduler_fresh else None,
             "scheduler_transitions": scheduler.transitions if scheduler_fresh else None,
             "scheduler_sample_age_seconds": scheduler_age,
+            "scheduler_uncertain_transitions": (
+                scheduler.uncertain_transitions if scheduler_fresh else None
+            ),
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
         if len(packet) <= MAX_HEALTH_BYTES:
