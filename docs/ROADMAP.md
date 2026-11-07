@@ -48,6 +48,7 @@
 - [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
+- [x] Anonymous ordinal process candidate labels in safety output; no raw PIDs in reported work reasons
 - [x] Explicit foreground MONITOR supervisor with persistent OFF shutdown and safe invalid-config failure
 - [x] Optional systemd --user MONITOR supervisor with bounded recovery and OFF idleness (not installed by code changes)
 - [x] Private stale-socket recovery with exclusive ownership and foreign-path protection
