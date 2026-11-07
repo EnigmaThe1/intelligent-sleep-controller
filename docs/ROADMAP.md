@@ -29,7 +29,8 @@
 - [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
-- [x] Read-only logind inhibitor inventory (GNOME session inhibitors still pending)
+- [x] Read-only logind inhibitor inventory
+- [x] Read-only current GNOME session IsInhibited(4/8) flags (not complete multi-session coverage)
 - [x] Read-only Linux session and loaded systemd timer discovery with UNKNOWN on failures
 - [x] On-demand, bounded read-only systemd timer waiting/running/activating service census without leaking unit names
 - [x] On-demand, bounded read-only installed systemd timer-file census (separate from loaded units, no scheduler completeness claim)
