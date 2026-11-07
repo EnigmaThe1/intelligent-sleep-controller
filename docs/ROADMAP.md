@@ -32,6 +32,7 @@
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Pure bounded opt-in task↔process identity bindings with sticky UNKNOWN after missing scans, PID reuse, or vanished child (no authority or service wiring yet)
 - [x] Refuse ambiguous duplicate process-to-task claims and retain UNKNOWN after process observation gaps (pure model only)
+- [x] Read-only cgroup v2 membership probe binds a previously observed same-user process identity to an expected service cgroup; UNKNOWN on races (not trusted owner authentication)
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
 - [x] Read-only logind inhibitor inventory
 - [x] Read-only current GNOME session IsInhibited(4/8) flags (not complete multi-session coverage)
