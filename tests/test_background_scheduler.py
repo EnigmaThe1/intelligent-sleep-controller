@@ -10,8 +10,10 @@ from isc.background_scheduler import BackgroundSchedulerObserver, SchedulerPulse
 from isc.timer_service_lifecycle import ServiceTaskSnapshot
 
 
-def snap(*rows):
-    return ServiceTaskSnapshot(rows)
+def snap(*rows, invocation="a" * 32):
+    return ServiceTaskSnapshot(
+        rows, invocations=tuple((name, invocation) for name, _, _ in rows),
+    )
 
 
 class BackgroundSchedulerTests(unittest.TestCase):
@@ -60,6 +62,48 @@ class BackgroundSchedulerTests(unittest.TestCase):
         self.assertEqual(pulses[1].transitions, 0)
         self.assertEqual(pulses[1].uncertain_transitions, 1)
         self.assertFalse(pulses[1].coverage_verified)
+
+    def test_service_restart_same_cgroup_is_a_confirmed_change(self):
+        samples = iter((
+            (snap(("private.service", "/slice/private", 2), invocation="a" * 32), snap()),
+            (snap(("private.service", "/slice/private", 2), invocation="b" * 32), snap()),
+        ))
+        pulses = []
+        observer = None
+
+        def publish(pulse):
+            pulses.append(pulse)
+            if len(pulses) == 2:
+                observer._stop.set()
+
+        observer = BackgroundSchedulerObserver(
+            publish, scanner=lambda: next(samples), interval_seconds=5,
+        )
+        observer._run()
+        self.assertEqual(pulses[1].transitions, 1)
+        self.assertEqual(pulses[1].uncertain_transitions, 0)
+        self.assertFalse(pulses[1].coverage_verified)
+
+    def test_missing_activation_identity_is_uncertain_not_safe(self):
+        samples = iter((
+            (snap(("private.service", "/slice/private", 2)), snap()),
+            (snap(("private.service", "/slice/private", 2), invocation=None), snap()),
+        ))
+        pulses = []
+        observer = None
+
+        def publish(pulse):
+            pulses.append(pulse)
+            if len(pulses) == 2:
+                observer._stop.set()
+
+        observer = BackgroundSchedulerObserver(
+            publish, scanner=lambda: next(samples), interval_seconds=5,
+        )
+        observer._run()
+        self.assertEqual(pulses[1].transitions, 0)
+        self.assertEqual(pulses[1].uncertain_transitions, 1)
+        self.assertEqual(pulses[1].uncertain, 1)
 
     def test_scanner_failure_publishes_unknown_and_resets_history(self):
         values = iter((
