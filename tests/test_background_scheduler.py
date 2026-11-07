@@ -35,9 +35,31 @@ class BackgroundSchedulerTests(unittest.TestCase):
         self.assertEqual((pulses[0].services, pulses[0].with_tasks), (1, 1))
         self.assertIsNone(pulses[0].transitions)
         self.assertEqual((pulses[1].with_tasks, pulses[1].transitions), (0, 1))
+        self.assertEqual(pulses[1].uncertain_transitions, 0)
         self.assertFalse(any(p.coverage_verified for p in pulses))
         self.assertNotIn("private.service", repr(pulses))
         self.assertNotIn("/slice/private", repr(pulses))
+
+    def test_unknown_transitions_are_not_reported_as_observed_changes(self):
+        samples = iter((
+            (snap(("private.service", "", None)), snap()),
+            (snap(("private.service", "", None)), snap()),
+        ))
+        pulses = []
+        observer = None
+
+        def publish(pulse):
+            pulses.append(pulse)
+            if len(pulses) == 2:
+                observer._stop.set()
+
+        observer = BackgroundSchedulerObserver(
+            publish, scanner=lambda: next(samples), interval_seconds=5,
+        )
+        observer._run()
+        self.assertEqual(pulses[1].transitions, 0)
+        self.assertEqual(pulses[1].uncertain_transitions, 1)
+        self.assertFalse(pulses[1].coverage_verified)
 
     def test_scanner_failure_publishes_unknown_and_resets_history(self):
         values = iter((
