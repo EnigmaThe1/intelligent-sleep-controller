@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.scheduled_work import (
     _unit_query, parse_unit_states, read_scheduled_work,
+    _timer_file_query, parse_timer_unit_files, read_timer_unit_files,
 )
 
 
@@ -111,6 +112,44 @@ class ScheduledWorkTests(unittest.TestCase):
         self.assertIsNone(result.system_timers)
         self.assertEqual(result.user_timers.listed, 0)
         self.assertFalse(result.coverage_verified)
+
+    def test_timer_file_states_and_unloaded_definitions(self):
+        raw = (
+            "apt-daily.timer enabled enabled\\n"
+            "backup@.timer disabled disabled\\n"
+            "dbus\\\\x2dtest.timer static -\\n"
+            "ephemeral.timer generated -\\n"
+        )
+        result = parse_timer_unit_files(raw)
+        self.assertIsNotNone(result)
+        self.assertEqual((result.listed, result.enabled,
+                          result.disabled, result.other), (4, 1, 1, 2))
+        self.assertFalse(result.coverage_verified)
+
+    def test_timer_file_malformed_unknown_and_duplicate(self):
+        cases = (None, "not a valid output", "x.service enabled enabled",
+                 "x.timer custom enabled",
+                 "x.timer enabled enabled\\nx.timer enabled enabled",
+                 "x.timer enabled invalid-preset",
+                 "\\n".join("x.timer enabled" for _ in range(4097)))
+        for raw in cases:
+            with self.subTest(raw=repr(raw)[:48]):
+                self.assertIsNone(parse_timer_unit_files(raw))
+
+    def test_timer_file_queries_do_not_mutate_system_state(self):
+        with patch("isc.scheduled_work._capture",
+                   side_effect=["a.timer enabled enabled\\n", None]) as capture:
+            system, user = read_timer_unit_files()
+        self.assertEqual(system.enabled, 1)
+        self.assertIsNone(user)
+        self.assertFalse(system.coverage_verified)
+        self.assertEqual([call.args[0] for call in capture.call_args_list], [
+            _timer_file_query("--system"), _timer_file_query("--user"),
+        ])
+        self.assertTrue(all("list-unit-files" in x for x in
+                            [call.args[0] for call in capture.call_args_list]))
+        with self.assertRaises(ValueError):
+            _timer_file_query("--invalid")
 
     def test_invalid_unit_query_arguments_never_produce_command(self):
         for scope, kind in (("--bad", "timer"), ("--user", "job")):
