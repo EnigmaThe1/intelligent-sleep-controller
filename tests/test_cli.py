@@ -79,6 +79,33 @@ class CLITests(unittest.TestCase):
         self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
 
 
+    @patch("isc.cli.read_process_candidates", return_value=None)
+    @patch("isc.cli.read_gnome_inhibit_flags")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2400000)
+    def test_check_gnome_flags_are_conservative(
+        self, idle, logind, gnome, processes,
+    ):
+        from isc.gnome_inhibitors import GnomeInhibitFlags
+        for flags, expected in (
+            (GnomeInhibitFlags(False, False), False),
+            (GnomeInhibitFlags(True, False), True),
+            (GnomeInhibitFlags(False, True), True),
+            (GnomeInhibitFlags(None, False), True),
+            (GnomeInhibitFlags(False, None), True),
+        ):
+            with self.subTest(flags=flags):
+                gnome.return_value = flags
+                output = StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(main(["check"]), 0)
+                result = output.getvalue()
+                self.assertIn("GNOME multi-session inhibitor coverage: NOT VERIFIED", result)
+                self.assertEqual("sleep_inhibitor_present" in result, expected)
+                self.assertIn("workload_coverage_unverified", result)
+                self.assertIn("scheduled_work_safety_unverified", result)
+                self.assertIn("Verdict: DO NOT AUTO-SUSPEND", result)
+
     @patch("isc.cli.read_process_candidates")
     def test_processes_never_claim_a_pid_is_active_or_idle(self, scanner):
         from isc.processes import ProcessCandidate, ProcessScan
