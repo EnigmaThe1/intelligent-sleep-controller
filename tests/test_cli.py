@@ -106,6 +106,35 @@ class CLITests(unittest.TestCase):
                 self.assertIn("scheduled_work_safety_unverified", result)
                 self.assertIn("Verdict: DO NOT AUTO-SUSPEND", result)
 
+    @patch("isc.cli.read_session_census")
+    @patch("isc.cli.read_process_candidates", return_value=None)
+    @patch("isc.cli.read_gnome_inhibit_flags")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2400000)
+    def test_check_session_census_is_diagnostic_not_authority(
+        self, idle, logind, gnome, processes, sessions,
+    ):
+        from isc.gnome_inhibitors import GnomeInhibitFlags
+        from isc.session_census import SessionCensus
+        gnome.return_value = GnomeInhibitFlags(False, False)
+        for census, expected in (
+            (SessionCensus(1, 1, 0, 0), "Linux login sessions: 1"),
+            (SessionCensus(2, 1, 1, 0), "Linux login sessions: 2"),
+            (SessionCensus(2, 1, 0, 1), "unknown=1"),
+            (None, "Linux login session census: UNKNOWN"),
+        ):
+            with self.subTest(census=census):
+                sessions.return_value = census
+                output = StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(main(["check"]), 0)
+                text = output.getvalue()
+                self.assertIn(expected, text)
+                self.assertIn("GNOME multi-session inhibitor coverage: NOT VERIFIED", text)
+                self.assertIn("workload_coverage_unverified", text)
+                self.assertIn("scheduled_work_safety_unverified", text)
+                self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
+
     @patch("isc.cli.read_process_candidates")
     def test_processes_never_claim_a_pid_is_active_or_idle(self, scanner):
         from isc.processes import ProcessCandidate, ProcessScan
