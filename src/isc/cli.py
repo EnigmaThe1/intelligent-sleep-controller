@@ -41,6 +41,9 @@ from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
 from .timer_service_tasks import read_timer_service_tasks
 from .timer_task_watch import compare_task_counts
+from .timer_service_lifecycle import (
+    read_service_task_snapshots, compare_service_task_snapshots,
+)
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -695,6 +698,43 @@ def native_activity_cli() -> int:
 
 
 
+def timer_service_watch_cli(*, seconds: float) -> int:
+    """Observe transient per-service transitions without revealing identity."""
+    if not math.isfinite(seconds) or not (0 <= seconds <= 60):
+        print("Service observation interval must be between 0 and 60 seconds.")
+        return 2
+    first = read_service_task_snapshots()
+    if seconds:
+        time.sleep(seconds)
+    second = read_service_task_snapshots()
+    print("ISC TIMER SERVICE LIFECYCLE WATCH — READ ONLY")
+    unknown = False
+    for label, before, after in (
+        ("System", first[0], second[0]),
+        ("User", first[1], second[1]),
+    ):
+        change = compare_service_task_snapshots(before, after)
+        if change is None:
+            unknown = True
+            print(f"{label}: UNKNOWN (missing or inconsistent observations)")
+        else:
+            print(
+                f"{label}: services {change.first_services} → "
+                f"{change.second_services}; appeared {change.appeared}; "
+                f"disappeared {change.disappeared}; "
+                f"tasks present twice {change.stayed_with_tasks}; "
+                f"gained reported tasks {change.gained_tasks}; "
+                f"lost reported tasks {change.lost_reported_tasks}; "
+                f"unknown transitions {change.unknown_transitions}; "
+                f"zero tasks twice {change.unchanged_without_tasks}"
+            )
+    print("Changed, absent or zero task counts do not prove job completion.")
+    print("Detached work, unsampled intervals and other schedulers are unverified.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No system settings, timers or services changed.")
+    return 2 if unknown else 0
+
+
 def timer_task_watch_cli(*, seconds: float) -> int:
     """Compare two partial task-count snapshots without inferring completion."""
     if not math.isfinite(seconds) or not (0 <= seconds <= 60):
@@ -878,7 +918,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -924,6 +964,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return timer_service_tasks_cli()
     if args.command == "timer-task-watch":
         return timer_task_watch_cli(seconds=args.seconds)
+    if args.command == "timer-service-watch":
+        return timer_service_watch_cli(seconds=args.seconds)
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
