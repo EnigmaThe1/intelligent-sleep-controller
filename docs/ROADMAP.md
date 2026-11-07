@@ -49,6 +49,7 @@
 - [x] Distinguish observed timer-linked service changes from unknown transitions in MONITOR health (no false activity claims)
 - [x] Read-only on-demand systemd InvocationID identity comparison (does not establish task completion)
 - [x] Continuous MONITOR scheduler samples InvocationID alongside task counts; missing IDs stay UNKNOWN, activation changes are reported
+- [x] Publish separate aggregate service activation-change count in backwards-compatible MONITOR health; retains unknown transitions
 - [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
