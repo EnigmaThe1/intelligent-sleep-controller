@@ -83,6 +83,8 @@
 - [x] Conservative subagent start/stop observation preserves child-unknown flag
 - [ ] Authoritative active-child counts and external-wait supervision; no idle assumptions from CPU
 - [x] Optional GTK3/AppIndicator status tray with OFF/MONITOR and guarded manual Suspend (no autostart)
+- [x] Explicit current-user GNOME Show Apps launcher with separate visible GTK window and reversible installation
+- [ ] Full desktop packaging with automatic desktop-entry registration and icon asset on supported distros
 - [x] Tray-owned MONITOR process starts/stops with persistent OFF/MONITOR choices (not login autostart)
 - [x] Optional per-user autostart enable/disable with explicit approval, foreign-file protection and single-instance tray lock (not enabled on host)
 - [x] Legacy ISC systemd/autostart path-aware ownership validation for safe disable after moves
