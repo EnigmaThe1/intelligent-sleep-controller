@@ -223,6 +223,7 @@ class MonitorHealthTests(unittest.TestCase):
                 self.assertIsNone(stale["scheduler_services"])
                 self.assertIsNone(stale["scheduler_with_tasks"])
                 self.assertIsNone(stale["scheduler_uncertain_transitions"])
+                self.assertIsNone(stale["scheduler_invocation_changes"])
                 self.assertIn(stale["scheduler_sample_age_seconds"], (181, 182))
 
     def test_scheduler_health_roundtrip_over_socket(self):
@@ -232,7 +233,7 @@ class MonitorHealthTests(unittest.TestCase):
                 monitor.update_scheduler_pulse(SchedulerPulse(
                     services=2, with_tasks=1, uncertain=1,
                     transitions=0, observed_at=time.monotonic(),
-                    uncertain_transitions=1,
+                    uncertain_transitions=1, invocation_changes=0,
                 ))
                 thread = threading.Thread(
                     target=monitor.run_for, args=(0.4,), daemon=True,
@@ -246,6 +247,7 @@ class MonitorHealthTests(unittest.TestCase):
                     self.assertEqual(health.scheduler_uncertain, 1)
                     self.assertEqual(health.scheduler_transitions, 0)
                     self.assertEqual(health.scheduler_uncertain_transitions, 1)
+                    self.assertEqual(health.scheduler_invocation_changes, 0)
                     self.assertFalse(health.coverage_verified)
                 finally:
                     thread.join(timeout=2)
