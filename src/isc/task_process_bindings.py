@@ -29,7 +29,7 @@ class BoundTask:
     root_start_ticks: int
     root_name: str
     child_identity_seen: bool = False
-    uncertain: bool = True  # Registration alone cannot establish ownership.
+    uncertain: bool = False  # Visible identity is activity evidence, not owner authentication.
     last_observed: float | None = None
 
 
@@ -150,7 +150,11 @@ class TaskProcessBindings:
             root_visible=self._latest_visible,
             root_missing_or_replaced=self._latest_missing,
             child_observed=self._latest_children,
-            unknown=len(self._tasks) + int(self._history_lost),
+            unknown=(
+                sum(int(task.uncertain or self._last_scan is None)
+                    for task in self._tasks.values())
+                + int(self._history_lost)
+            ),
             observed_at=self._last_scan,
         )
 
