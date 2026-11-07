@@ -38,6 +38,7 @@ from .native_sleep import assess_native_sleep, request_terminal_sleep
 from .native_observers import read_native_activity
 from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_timer_associations
 from .timer_service_states import read_timer_service_states
+from .timer_service_processes import read_timer_service_process_indicators
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -692,6 +693,28 @@ def native_activity_cli() -> int:
 
 
 
+def timer_service_pids_cli() -> int:
+    """Display aggregate systemd service process metadata, not work completion."""
+    system, user = read_timer_service_process_indicators()
+    print("ISC TIMER-LINKED SERVICE PROCESS INDICATORS — READ ONLY")
+    for label, evidence in (("System timers", system), ("User timers", user)):
+        if evidence is None:
+            print(f"{label}: UNKNOWN (metadata unavailable or ambiguous)")
+        else:
+            print(
+                f"{label}: {evidence.timers_inspected} loaded timers; "
+                f"{evidence.distinct_services} services; "
+                f"{evidence.main_pid_nonzero} MainPID nonzero; "
+                f"{evidence.control_pid_nonzero} ControlPID nonzero; "
+                f"{evidence.neither_pid_reported} neither reported"
+            )
+    print("Zero PIDs do not establish child work, cgroup or external job quiescence.")
+    print("This is not a complete process census or evidence of safe suspend.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No services, timers or power settings changed.")
+    return 0
+
+
 def timer_service_states_cli() -> int:
     """Read-only service-state snapshots, never an indication of safe sleep."""
     system, user = read_timer_service_states()
@@ -795,7 +818,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -835,6 +858,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return timer_associations_cli()
     if args.command == "timer-service-states":
         return timer_service_states_cli()
+    if args.command == "timer-service-pids":
+        return timer_service_pids_cli()
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
