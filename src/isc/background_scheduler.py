@@ -26,6 +26,7 @@ class SchedulerPulse:
     transitions: int | None
     observed_at: float
     coverage_verified: bool = False
+    uncertain_transitions: int | None = None
 
 
 class BackgroundSchedulerObserver:
@@ -76,7 +77,9 @@ class BackgroundSchedulerObserver:
                 current = (None, None)
             now = time.monotonic()
             if any(scope is None for scope in current):
-                pulse = SchedulerPulse(None, None, None, None, now)
+                pulse = SchedulerPulse(
+                    None, None, None, None, now, uncertain_transitions=None,
+                )
                 previous = (None, None)
             else:
                 # Never retain raw names beyond the previous sampling interval.
@@ -96,16 +99,22 @@ class BackgroundSchedulerObserver:
                     for scope in current if scope
                 )
                 if all(change is not None for change in changes):
-                    transitions: int | None = sum(
+                    transitions: int | None = min(2**31, sum(
                         c.appeared + c.disappeared + c.gained_tasks
-                        + c.lost_reported_tasks + c.unknown_transitions
+                        + c.lost_reported_tasks
                         for c in changes if c is not None
-                    )
+                    ))
+                    uncertain_transitions: int | None = min(2**31, sum(
+                        c.unknown_transitions for c in changes
+                        if c is not None
+                    ))
                 else:
                     transitions = None
+                    uncertain_transitions = None
                 pulse = SchedulerPulse(
                     min(services, 2**31), min(tasks, 2**31),
                     min(uncertain, 2**31), transitions, now,
+                    uncertain_transitions=uncertain_transitions,
                 )
                 previous = current
             try:
