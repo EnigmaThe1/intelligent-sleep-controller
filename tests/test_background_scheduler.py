@@ -83,7 +83,6 @@ class BackgroundSchedulerTests(unittest.TestCase):
         self.assertEqual(pulses[1].transitions, 1)
         self.assertEqual(pulses[1].invocation_changes, 1)
         self.assertEqual(pulses[1].uncertain_transitions, 0)
-        self.assertEqual(pulses[1].invocation_changes, 0)
         self.assertFalse(pulses[1].coverage_verified)
 
     def test_missing_activation_identity_is_uncertain_not_safe(self):
