@@ -25,6 +25,10 @@ from .service import MonitorUnavailable, serve_monitor
 from .manual_power import assess_manual_suspend, request_manual_suspend
 from .tray import run_tray, backend_probe
 from .autostart import AutostartError, inspect_autostart, modify_autostart
+from .desktop_launcher import (
+    DesktopLauncherError, inspect_launcher, modify_launcher,
+)
+from .desktop_window import run_window
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
@@ -496,6 +500,33 @@ def manual_power(*, confirm: bool, action: str | None) -> int:
     return 0
 
 
+def desktop_app_control(*, operation: str | None, confirm: bool) -> int:
+    """Explicit GNOME Show Apps launcher only; never starts programs."""
+    print("ISC APPLICATION MENU LAUNCHER")
+    try:
+        if operation is None:
+            current = inspect_launcher()
+            print(f"Status: {current.state.upper()}")
+            print("Install using: isc app --install --confirm")
+            print("The launcher opens the ISC window; tray startup is separate.")
+            print("No files or services changed.")
+            return 0 if current.state != "foreign" else 2
+        if not confirm:
+            print("No changes made. Explicit --confirm is required.")
+            return 2
+        result = modify_launcher(operation)
+    except DesktopLauncherError as exc:
+        print(f"Launcher operation refused: {exc}")
+        print("No unrelated application entry intentionally modified.")
+        return 2
+    print(f"Status: {result.state.upper()}")
+    print("Launcher updated." if result.changed else "Already in requested state.")
+    print("GNOME Show Apps entry: Intelligent Sleep Controller.")
+    print("The tray is NOT enabled at login by this command.")
+    print("No applications launched, services restarted or power settings changed.")
+    return 0
+
+
 def tray_autostart(*, operation: str | None, confirm: bool) -> int:
     """Check, enable, or disable ISC user autostart; never start a process."""
     print("ISC TRAY LOGIN AUTOSTART")
@@ -699,7 +730,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "hook-self-test", "process-watch"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -711,6 +742,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--advertise", action="store_true", help="Expose temporary receiver via a fixed private runtime socket; never changes agent hooks")
     parser.add_argument("--socket-path", help="Explicit local Unix socket path for send-hook")
     parser.add_argument("--confirm", action="store_true", help="Explicitly authorize a selected change or manual suspend")
+    parser.add_argument("--install", action="store_true", help="Register ISC in GNOME Show Apps (app command only)")
+    parser.add_argument("--uninstall", action="store_true", help="Remove ISC Show Apps launcher (app command only)")
     parser.add_argument("--startup", choices=("enable", "disable"), help="User login tray startup control; requires autostart command")
     parser.add_argument("--service", choices=("enable", "disable"), help="Manage ISC-owned systemd user monitor service; requires service command")
     parser.add_argument("--minutes", type=int, choices=PRESETS_MINUTES, help="Keep Awake duration in minutes")
@@ -718,6 +751,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(argv)
+    if args.command == "app":
+        if args.install and args.uninstall:
+            parser.error("choose either --install or --uninstall")
+        operation = "install" if args.install else "remove" if args.uninstall else None
+        return desktop_app_control(operation=operation, confirm=args.confirm)
+    if args.install or args.uninstall:
+        parser.error("--install/--uninstall apply only to app")
+    if args.command == "window":
+        return run_window()
     if args.command == "process-watch":
         return process_watch_cli(seconds=args.seconds)
     if args.command == "scheduled-work":
