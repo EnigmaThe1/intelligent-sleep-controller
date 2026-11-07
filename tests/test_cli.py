@@ -606,6 +606,50 @@ class CLITests(unittest.TestCase):
         self.assertIn("User services: 0 listed", output.getvalue())
 
 
+    @patch("isc.cli.inspect_launcher")
+    def test_app_read_only_status_without_registration(self, inspect):
+        from isc.desktop_launcher import LauncherStatus
+        inspect.return_value = LauncherStatus("missing")
+        capture = StringIO()
+        with contextlib.redirect_stdout(capture):
+            self.assertEqual(main(["app"]), 0)
+        self.assertIn("Status: MISSING", capture.getvalue())
+        self.assertIn("--install --confirm", capture.getvalue())
+
+    @patch("isc.cli.modify_launcher")
+    def test_launcher_install_requires_confirmation(self, modify):
+        capture = StringIO()
+        with contextlib.redirect_stdout(capture):
+            self.assertEqual(main(["app", "--install"]), 2)
+        modify.assert_not_called()
+        self.assertIn("Explicit --confirm", capture.getvalue())
+
+    @patch("isc.cli.modify_launcher")
+    def test_explicit_launcher_install_and_remove_only_change_menu(self, modify):
+        from isc.desktop_launcher import LauncherStatus
+        modify.side_effect = [
+            LauncherStatus("installed", changed=True),
+            LauncherStatus("missing", changed=True),
+        ]
+        for command, expected in (
+            (["app", "--install", "--confirm"], "installed"),
+            (["app", "--uninstall", "--confirm"], "missing"),
+        ):
+            capture = StringIO()
+            with contextlib.redirect_stdout(capture):
+                self.assertEqual(main(command), 0)
+            self.assertIn("The tray is NOT enabled at login", capture.getvalue())
+        self.assertEqual(
+            [call.args[0] for call in modify.call_args_list],
+            ["install", "remove"],
+        )
+
+    @patch("isc.cli.run_window", return_value=0)
+    def test_window_command_dispatches_to_actual_desktop_ui(self, launch):
+        self.assertEqual(main(["window"]), 0)
+        launch.assert_called_once_with()
+
+
 
 if __name__ == "__main__":
     unittest.main()
