@@ -570,6 +570,42 @@ class CLITests(unittest.TestCase):
         self.assertIn("between 0 and 60", output.getvalue())
 
 
+    @patch("isc.cli.read_scheduled_work")
+    def test_scheduled_work_distinguishes_waiting_timers_from_running_services(
+        self, scheduled,
+    ):
+        from isc.scheduled_work import ScheduledWorkCensus, UnitCounts
+        scheduled.return_value = ScheduledWorkCensus(
+            system_timers=UnitCounts(19, waiting_timers=17),
+            user_timers=UnitCounts(2, waiting_timers=2),
+            system_services=UnitCounts(60, running_services=21, activating_services=1),
+            user_services=UnitCounts(14, running_services=5),
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["scheduled-work"]), 0)
+        text = output.getvalue()
+        self.assertIn("System timers: 19 listed; 17 waiting", text)
+        self.assertIn("User timers: 2 listed; 2 waiting", text)
+        self.assertIn("System services: 60 listed; 21 running, 1 activating", text)
+        self.assertIn("not identify the jobs they activate", text)
+        self.assertIn("Coverage: INCOMPLETE", text)
+        self.assertIn("Automatic suspension remains disabled", text)
+
+    @patch("isc.cli.read_scheduled_work")
+    def test_scheduled_work_query_failure_is_unknown(self, scheduled):
+        from isc.scheduled_work import ScheduledWorkCensus, UnitCounts
+        scheduled.return_value = ScheduledWorkCensus(
+            None, None, None, UnitCounts(0),
+        )
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["scheduled-work"]), 0)
+        self.assertIn("System timers: UNKNOWN", output.getvalue())
+        self.assertIn("System services: UNKNOWN", output.getvalue())
+        self.assertIn("User services: 0 listed", output.getvalue())
+
+
 
 if __name__ == "__main__":
     unittest.main()
