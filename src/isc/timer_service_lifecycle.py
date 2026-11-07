@@ -14,7 +14,7 @@ from .scheduled_work import _UNIT, _association_query, _timer_names, _unit_query
 from .timer_service_states import _properties
 from .timer_service_tasks import _task_query, _task_value, _valid_cgroup
 
-_INVOCATION = re.compile(r"[0-9a-fA-F]{32}\\Z")
+_INVOCATION = re.compile(r"[0-9a-fA-F]{32}\Z")
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,7 @@ def _read_scope(scope: str) -> ServiceTaskSnapshot | None:
     # Capture cgroup, task count and activation identity in ONE native query
     # so separate query timings cannot misattribute a restarted service.
     query = list(_task_query(scope, targets))
-    query[5] = "--property=Id,ControlGroup,TasksCurrent,InvocationID"
+    query[4] = "--property=Id,ControlGroup,TasksCurrent,InvocationID"
     rows = _properties(
         _capture(tuple(query)), targets,
         frozenset(("Id", "ControlGroup", "TasksCurrent", "InvocationID")),
