@@ -152,7 +152,8 @@ def status() -> int:
                 f"timer-linked services={health.scheduler_services}, "
                 f"reporting tasks={health.scheduler_with_tasks}, "
                 f"uncertain={health.scheduler_uncertain}, "
-                f"reported transitions={health.scheduler_transitions}; "
+                f"observed changes={health.scheduler_transitions}, "
+                f"uncertain transitions={health.scheduler_uncertain_transitions}; "
                 f"sample age={health.scheduler_sample_age_seconds}s"
             )
             print("Scheduler observations do not prove lifecycle completion.")
