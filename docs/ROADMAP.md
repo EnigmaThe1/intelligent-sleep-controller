@@ -24,6 +24,7 @@
 - [x] Read-only GNOME D-Bus idle probe (initial standalone adapter)
 - [x] Bounded in-memory work registry and retention with sticky UNKNOWN on lost history (authoritative resync pending)
 - [ ] Multi-session user-idle and active-seat discovery
+- [x] Read-only bounded logind active/inactive/unknown session census without identity disclosure (not multi-session GNOME idle coverage)
 - [x] Read-only current-user Linux /proc candidate inventory
 - [x] Read-only process identity/descendant snapshots with PID-reuse protection and conservative lifecycle comparison
 - [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
