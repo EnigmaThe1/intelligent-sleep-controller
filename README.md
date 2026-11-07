@@ -385,6 +385,26 @@ Existing private hook-configuration backups are **not automatically
 deleted**. Safe backup rotation remains a future operator-approved
 maintenance feature; do not remove recovery evidence during upgrades.
 
+## Read-only scheduled-work census
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc scheduled-work
+```
+
+This reports **aggregate system and user systemd unit counts**, separating
+listed timers, timers in the waiting state, services reported as running,
+and services reported as activating. Every subprocess is read-only and
+time-bounded. Unit names, commands, filenames, schedule details and private
+configuration are not retained or displayed.
+
+This is an **on-demand** diagnostic, not a new background polling job.
+A timer waiting for its next trigger is **not** evidence that its previous
+job completed. A service reporting inactive/exited may have detached child
+work. Some timers use nondefault `Unit=` targets, and cron, at, application
+schedulers, remote workloads and unloaded units remain unobserved. Query
+failures return UNKNOWN, never an observed zero. No result from this census
+establishes complete workload coverage or authorizes automatic suspension.
+
 ## Read-only process lifetime observation
 
 ISC can compare two bounded, same-user Linux process snapshots without
