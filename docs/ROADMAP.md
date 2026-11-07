@@ -35,6 +35,7 @@
 - [x] On-demand, bounded read-only installed systemd timer-file census (separate from loaded units, no scheduler completeness claim)
 - [x] Read effective Unit= associations for loaded timers without retaining unit names (configuration evidence only)
 - [x] On-demand read-only systemd states for distinct timer-linked services (not proof of task completion or child-work quiescence)
+- [x] Read-only systemd MainPID/ControlPID presence for timer-linked services (no process identity disclosure; zero does not prove quiescence)
 - [ ] Resolve timer-to-service ownership using native metadata and verify actual job lifecycle/wake guarantees
 - [ ] Scheduled service lifecycle coverage, all scheduler sources and conservative wake-safety checks
 - [x] One-shot read-only `check` verdict with reason codes (continuous MONITOR and audit log pending)
