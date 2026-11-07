@@ -277,6 +277,7 @@ def check() -> int:
     idle_ms = read_gnome_idle_ms()
     locks = read_inhibitors()
     gnome_flags = read_gnome_inhibit_flags()
+    session_census = read_session_census()
     scan = read_process_candidates()
     blockers: tuple[str, ...]
     if locks is None:
@@ -333,7 +334,17 @@ def check() -> int:
         f"suspend={_flag(gnome_flags.suspend_inhibited)}, "
         f"idle={_flag(gnome_flags.idle_inhibited)}"
     )
+    if session_census is None:
+        print("Linux login session census: UNKNOWN")
+    else:
+        print(
+            f"Linux login sessions: {session_census.listed}; "
+            f"active={session_census.active}, "
+            f"inactive={session_census.inactive}, "
+            f"unknown={session_census.unknown}"
+        )
     print("GNOME multi-session inhibitor coverage: NOT VERIFIED")
+    print("A single active login session does NOT establish safe inactivity.")
     print("Verdict: DO NOT AUTO-SUSPEND")
     for reason in result.reasons:
         print(f"  - {reason}")
