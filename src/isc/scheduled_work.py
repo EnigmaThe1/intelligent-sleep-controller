@@ -107,3 +107,76 @@ def read_scheduled_work() -> ScheduledWorkCensus:
             _capture(_unit_query("--user", "service")), kind="service",
         ),
     )
+
+
+# Installed unit files include definitions that may not currently be loaded.
+# These aggregate counts deliberately do NOT map a timer to a running job.
+_UNIT_FILE_STATES = frozenset((
+    "enabled", "enabled-runtime", "disabled", "static", "indirect",
+    "masked", "masked-runtime", "alias", "generated", "transient",
+    "linked", "linked-runtime", "bad",
+))
+
+
+@dataclass(frozen=True)
+class TimerFileCounts:
+    listed: int
+    enabled: int
+    disabled: int
+    other: int
+    coverage_verified: bool = False
+
+
+def parse_timer_unit_files(raw: str | None) -> TimerFileCounts | None:
+    """Parse systemctl list-unit-files; preserve UNKNOWN on ambiguous output."""
+    if raw is None or not isinstance(raw, str):
+        return None
+    if len(raw) > 200_000:
+        return None
+    lines = raw.strip().splitlines()
+    if len(lines) > 4096:
+        return None
+    listed = enabled = disabled = other = 0
+    seen: set[str] = set()
+    for line in lines:
+        if not line.strip():
+            continue
+        fields = line.split()
+        # --no-legend rows: UNIT_FILE STATE [PRESET]; preset is optional.
+        if len(fields) not in (2, 3):
+            return None
+        name, state = fields[:2]
+        matched = _UNIT.fullmatch(name)
+        if (matched is None or matched.group(1) != "timer"
+                or name in seen or state not in _UNIT_FILE_STATES):
+            return None
+        if len(fields) == 3 and fields[2] not in (
+            "enabled", "disabled", "ignored", "-", "static",
+        ):
+            return None
+        seen.add(name)
+        listed += 1
+        if state in ("enabled", "enabled-runtime"):
+            enabled += 1
+        elif state == "disabled":
+            disabled += 1
+        else:
+            other += 1
+    return TimerFileCounts(listed, enabled, disabled, other)
+
+
+def _timer_file_query(scope: str) -> tuple[str, ...]:
+    if scope not in ("--system", "--user"):
+        raise ValueError("invalid_timer_file_scope")
+    return (
+        "systemctl", scope, "--no-pager", "--no-legend", "--plain",
+        "--type=timer", "list-unit-files",
+    )
+
+
+def read_timer_unit_files() -> tuple[TimerFileCounts | None, TimerFileCounts | None]:
+    """Independent read-only system/user installed timer definitions census."""
+    return (
+        parse_timer_unit_files(_capture(_timer_file_query("--system"))),
+        parse_timer_unit_files(_capture(_timer_file_query("--user"))),
+    )
