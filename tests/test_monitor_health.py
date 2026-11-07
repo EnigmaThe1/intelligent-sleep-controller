@@ -203,6 +203,7 @@ class MonitorHealthTests(unittest.TestCase):
                 monitor.update_scheduler_pulse(SchedulerPulse(
                     services=21, with_tasks=1, uncertain=20,
                     transitions=None, observed_at=observed,
+                    uncertain_transitions=None,
                 ))
                 peer = Mock()
                 monitor._reply_health(peer)
@@ -211,6 +212,7 @@ class MonitorHealthTests(unittest.TestCase):
                 self.assertEqual(health["scheduler_with_tasks"], 1)
                 self.assertEqual(health["scheduler_uncertain"], 20)
                 self.assertIsNone(health["scheduler_transitions"])
+                self.assertIsNone(health["scheduler_uncertain_transitions"])
                 self.assertFalse(health["coverage_verified"])
                 self.assertNotIn("ControlGroup", health)
                 peer.reset_mock()
@@ -220,6 +222,7 @@ class MonitorHealthTests(unittest.TestCase):
                 stale = json.loads(peer.sendall.call_args.args[0])
                 self.assertIsNone(stale["scheduler_services"])
                 self.assertIsNone(stale["scheduler_with_tasks"])
+                self.assertIsNone(stale["scheduler_uncertain_transitions"])
                 self.assertIn(stale["scheduler_sample_age_seconds"], (181, 182))
 
     def test_scheduler_health_roundtrip_over_socket(self):
@@ -229,6 +232,7 @@ class MonitorHealthTests(unittest.TestCase):
                 monitor.update_scheduler_pulse(SchedulerPulse(
                     services=2, with_tasks=1, uncertain=1,
                     transitions=0, observed_at=time.monotonic(),
+                    uncertain_transitions=1,
                 ))
                 thread = threading.Thread(
                     target=monitor.run_for, args=(0.4,), daemon=True,
@@ -241,6 +245,7 @@ class MonitorHealthTests(unittest.TestCase):
                     self.assertEqual(health.scheduler_with_tasks, 1)
                     self.assertEqual(health.scheduler_uncertain, 1)
                     self.assertEqual(health.scheduler_transitions, 0)
+                    self.assertEqual(health.scheduler_uncertain_transitions, 1)
                     self.assertFalse(health.coverage_verified)
                 finally:
                     thread.join(timeout=2)
