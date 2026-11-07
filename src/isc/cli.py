@@ -139,6 +139,23 @@ def status() -> int:
                 f"sample age={health.process_sample_age_seconds}s"
             )
             print("Background census is not proof of job completion or sleep safety.")
+        if health.scheduler_sample_age_seconds is None:
+            print("Background scheduler census: UNKNOWN (no completed sample)")
+        elif health.scheduler_services is None:
+            print(
+                "Background scheduler census: UNKNOWN "
+                f"(sample {health.scheduler_sample_age_seconds}s ago)"
+            )
+        else:
+            print(
+                "Background scheduler census (partial): "
+                f"timer-linked services={health.scheduler_services}, "
+                f"reporting tasks={health.scheduler_with_tasks}, "
+                f"uncertain={health.scheduler_uncertain}, "
+                f"reported transitions={health.scheduler_transitions}; "
+                f"sample age={health.scheduler_sample_age_seconds}s"
+            )
+            print("Scheduler observations do not prove lifecycle completion.")
         print("Coverage verified: NO (observations are not authority)")
     print("No system configuration has been changed.")
     return 0
