@@ -75,17 +75,54 @@ class TimerServiceLifecycleTests(unittest.TestCase):
             snap(("invalid.timer", "/a", 1)), valid,
         ))
 
+    def test_strict_invocation_comparison_prevents_false_continuation(self):
+        first = ServiceTaskSnapshot(
+            (("one.service", "/same", 3),),
+            invocations=(("one.service", "a" * 32),),
+        )
+        second = ServiceTaskSnapshot(
+            (("one.service", "/same", 3),),
+            invocations=(("one.service", "b" * 32),),
+        )
+        comparison = compare_service_task_snapshots(
+            first, second, require_invocation=True,
+        )
+        self.assertEqual(comparison.changed_invocations, 1)
+        self.assertEqual(comparison.stayed_with_tasks, 0)
+        self.assertFalse(comparison.coverage_verified)
+
+    def test_strict_invocation_unavailable_is_unknown(self):
+        first = ServiceTaskSnapshot(
+            (("one.service", "/same", 3),),
+            invocations=(("one.service", "a" * 32),),
+        )
+        after = ServiceTaskSnapshot(
+            (("one.service", "/same", 3),),
+            invocations=(("one.service", None),),
+        )
+        comparison = compare_service_task_snapshots(
+            first, after, require_invocation=True,
+        )
+        self.assertEqual(comparison.unknown_transitions, 1)
+        self.assertEqual(comparison.stayed_with_tasks, 0)
+        self.assertIsNone(compare_service_task_snapshots(
+            first, ServiceTaskSnapshot((("one.service", "/same", 3),)),
+            require_invocation=True,
+        ))
+
     def test_native_capture_is_read_only_and_scope_specific(self):
         with patch("isc.timer_service_lifecycle._capture", side_effect=[
             "a.timer loaded active waiting Test\n",
             "Id=a.timer\nUnit=linked.service\n",
-            "Id=linked.service\nControlGroup=/system.slice/linked.service\nTasksCurrent=2\n",
+            "Id=linked.service\nControlGroup=/system.slice/linked.service\nTasksCurrent=2\nInvocationID=" + "a" * 32 + "\n",
             "b.timer loaded active waiting Test\n",
             "Id=b.timer\nUnit=other.service\n",
-            "Id=other.service\nControlGroup=\nTasksCurrent=[not set]\n",
+            "Id=other.service\nControlGroup=\nTasksCurrent=[not set]\nInvocationID=\n",
         ]) as capture:
             system, user = read_service_task_snapshots()
         self.assertEqual(system.observed[0][2], 2)
+        self.assertEqual(system.invocations[0][1], "a" * 32)
+        self.assertIsNone(user.invocations[0][1])
         self.assertIsNone(user.observed[0][2])
         self.assertEqual(capture.call_count, 6)
         self.assertTrue(all(
