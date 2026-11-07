@@ -15,7 +15,7 @@ import re
 
 from .native_observers import _capture
 
-_UNIT = re.compile(r"[A-Za-z0-9_.:@\\-]+\\.(timer|service)\\Z", re.ASCII)
+_UNIT = re.compile(r"[A-Za-z0-9_.:@-]+\.(timer|service)\Z", re.ASCII)
 _MARKERS = frozenset(("●", "○", "×", "↻"))
 _LOAD = frozenset(("loaded", "not-found", "error", "bad-setting", "masked"))
 _ACTIVE = frozenset(("active", "inactive", "activating", "deactivating", "failed", "reloading"))
@@ -52,7 +52,7 @@ def parse_unit_states(raw: str | None, *, kind: str) -> UnitCounts | None:
         return None
     listed = waiting = running = activating = 0
     for line in lines:
-        fields = line.split(maxsplit=4)
+        fields = line.split()
         if not fields:
             continue
         if fields[0] in _MARKERS:
