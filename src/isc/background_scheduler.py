@@ -27,6 +27,7 @@ class SchedulerPulse:
     observed_at: float
     coverage_verified: bool = False
     uncertain_transitions: int | None = None
+    invocation_changes: int | None = None
 
 
 class BackgroundSchedulerObserver:
@@ -78,7 +79,8 @@ class BackgroundSchedulerObserver:
             now = time.monotonic()
             if any(scope is None for scope in current):
                 pulse = SchedulerPulse(
-                    None, None, None, None, now, uncertain_transitions=None,
+                    None, None, None, None, now,
+                    uncertain_transitions=None, invocation_changes=None,
                 )
                 previous = (None, None)
             else:
@@ -106,6 +108,10 @@ class BackgroundSchedulerObserver:
                         + c.lost_reported_tasks + c.changed_invocations
                         for c in changes if c is not None
                     ))
+                    invocation_changes: int | None = min(2**31, sum(
+                        c.changed_invocations for c in changes
+                        if c is not None
+                    ))
                     uncertain_transitions: int | None = min(2**31, sum(
                         c.unknown_transitions for c in changes
                         if c is not None
@@ -113,10 +119,12 @@ class BackgroundSchedulerObserver:
                 else:
                     transitions = None
                     uncertain_transitions = None
+                    invocation_changes = None
                 pulse = SchedulerPulse(
                     min(services, 2**31), min(tasks, 2**31),
                     min(uncertain, 2**31), transitions, now,
                     uncertain_transitions=uncertain_transitions,
+                    invocation_changes=invocation_changes,
                 )
                 previous = current
             try:
