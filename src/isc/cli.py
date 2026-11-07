@@ -40,6 +40,7 @@ from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_tim
 from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
 from .timer_service_tasks import read_timer_service_tasks
+from .timer_task_watch import compare_task_counts
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -694,6 +695,41 @@ def native_activity_cli() -> int:
 
 
 
+def timer_task_watch_cli(*, seconds: float) -> int:
+    """Compare two partial task-count snapshots without inferring completion."""
+    if not math.isfinite(seconds) or not (0 <= seconds <= 60):
+        print("Timer task observation interval must be between 0 and 60 seconds.")
+        return 2
+    before = read_timer_service_tasks()
+    if seconds:
+        time.sleep(seconds)
+    after = read_timer_service_tasks()
+    print("ISC TIMER TASK AGGREGATE WATCH — READ ONLY")
+    unknown = False
+    for label, previous, current in (
+        ("System", before[0], after[0]),
+        ("User", before[1], after[1]),
+    ):
+        change = compare_task_counts(previous, current)
+        if change is None:
+            unknown = True
+            print(f"{label}: UNKNOWN (missing or inconsistent observation)")
+        else:
+            print(
+                f"{label}: services {change.first_services} → "
+                f"{change.second_services}; reporting tasks "
+                f"{change.first_with_tasks} → {change.second_with_tasks}; "
+                f"unknown task counts {change.first_unknown} → "
+                f"{change.second_unknown}; aggregates changed: "
+                f"{'YES' if change.aggregates_changed else 'NO'}"
+            )
+    print("Equal aggregates can conceal individual job starts and exits.")
+    print("No completed-work or scheduler-coverage claim is possible.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No system configuration or services changed.")
+    return 2 if unknown else 0
+
+
 def timer_service_tasks_cli() -> int:
     """Display read-only cgroup task-presence counts, never safe-idle proof."""
     system, user = read_timer_service_tasks()
@@ -842,7 +878,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -886,6 +922,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return timer_service_pids_cli()
     if args.command == "timer-service-tasks":
         return timer_service_tasks_cli()
+    if args.command == "timer-task-watch":
+        return timer_task_watch_cli(seconds=args.seconds)
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
