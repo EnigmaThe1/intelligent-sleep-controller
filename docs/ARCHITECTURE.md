@@ -262,6 +262,20 @@ The observer never marks schedule coverage complete or requests suspension.
 This is a precursor to explicit scheduler ownership and wake guarantees,
 not a substitute for them.
 
+## Partial scheduled-unit state census (on demand)
+
+The `scheduled-work` CLI uses constrained read-only `systemctl list-units`
+queries in both the system and user managers. Timer units are classified as
+listed or waiting; service units are independently classified as listed,
+running, or activating. All output is aggregate-only. No timer-to-service
+linkage is inferred from unit names; a systemd timer can have an explicit
+`Unit=` override, and a unit can spawn detached work. An inactive unit
+does not prove that an autonomous task completed. Timer and service state
+queries are independent and return UNKNOWN individually on malformed or
+unavailable evidence. The census is invoked by the operator only and does
+not add polling to the running MONITOR service. It never marks scheduler
+coverage complete or requests suspend.
+
 ## Sender-claimed source and synthetic diagnostic separation
 
 The MONITOR-only receiver reports bounded aggregate event counts for
