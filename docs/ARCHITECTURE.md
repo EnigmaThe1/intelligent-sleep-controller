@@ -252,6 +252,19 @@ The same native-control backend serves CLI and tray actions:
 The ISC automatic ON action remains disabled. New manual capabilities
 are not evidence that the autonomous workload-coverage requirement is met.
 
+## GNOME app launcher versus tray versus background service
+
+The systemd user monitoring service is non-graphical and does not create a
+tray icon. An explicit `app --install --confirm` operation writes one
+XDG `~/.local/share/applications/intelligent-sleep-controller.desktop`
+entry under the current user. This launcher calls `isc window`, opening
+a visible GTK3 status/control window with no AppIndicator requirement.
+The optional `isc tray` is separately started by an explicit user action
+or separately opted-in login autostart; `~/.config/autostart/` deliberately
+uses `NoDisplay=true` and is not the application-menu launcher. Foreign
+or structurally modified desktop entries are preserved. No menu registration
+installs services, starts applications, alters power settings, or enables ON.
+
 ## Linux-native session and timer observation
 
 A read-only native observer requests login sessions and loaded timer-unit
