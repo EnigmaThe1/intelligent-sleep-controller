@@ -187,6 +187,7 @@ class MonitorHealth:
     scheduler_transitions: int | None = None
     scheduler_sample_age_seconds: int | None = None
     scheduler_uncertain_transitions: int | None = None
+    scheduler_invocation_changes: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -232,6 +233,8 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             allowed | extension | process_extension | scheduler_extension,
             allowed | extension | process_extension | scheduler_extension
             | {"scheduler_uncertain_transitions"},
+            allowed | extension | process_extension | scheduler_extension
+            | {"scheduler_uncertain_transitions", "scheduler_invocation_changes"},
         )
         if not isinstance(obj, dict) or set(obj) not in versions:
             return None
@@ -266,7 +269,8 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             if sample_age is None and any(counts_present):
                 return None
         if scheduler_extension <= obj.keys():
-            for key in scheduler_extension | ({"scheduler_uncertain_transitions"}
+            for key in scheduler_extension | ({"scheduler_uncertain_transitions",
+                                               "scheduler_invocation_changes"}
                                                & obj.keys()):
                 value = obj[key]
                 if value is not None and (
@@ -575,6 +579,9 @@ class LocalMonitor:
             "scheduler_sample_age_seconds": scheduler_age,
             "scheduler_uncertain_transitions": (
                 scheduler.uncertain_transitions if scheduler_fresh else None
+            ),
+            "scheduler_invocation_changes": (
+                scheduler.invocation_changes if scheduler_fresh else None
             ),
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
