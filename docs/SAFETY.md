@@ -154,3 +154,14 @@ unloaded timers, cron/at, in-app schedulers, independent workers, other-user
 work and wake capabilities remain unverified. Missing or unparsable native
 unit output is UNKNOWN, not zero. No timer or service counts may set
 `coverage_verified` or authorize automatic suspend.
+
+## Explicit desktop-menu registration
+
+An application entry under the current user's XDG applications directory
+is separate from login autostart. Only the exact canonical ISC-owned
+desktop entry may be removed. Symlinks, unsafe ownership, group-writable
+directories or edited foreign entries must be rejected. Launching the
+application must open a window even without an AppIndicator extension;
+a tray process may be launched only by user action or separately opted-in
+autostart. The window may change only OFF/MONITOR when explicitly selected.
+No automatic power operation is reachable from the launcher.
