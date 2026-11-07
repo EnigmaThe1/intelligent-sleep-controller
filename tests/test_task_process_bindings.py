@@ -101,9 +101,9 @@ class TaskProcessBindingsTests(unittest.TestCase):
         self.assertEqual(reg.states(), (WorkState.ACTIVE,))
         after = reg.observe(lineage(proc()), now=2)
         self.assertEqual(after.child_observed, 0)
-        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
-        # ACTIVE only means the root is visible; child-work quiescence is NOT
-        # established, and aggregate coverage remains unverified.
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+        # A formerly visible child disappearing is not a completion signal,
+        # even while the root remains visible.
         self.assertFalse(after.coverage_verified)
 
     def test_invalid_registration_refused_no_overwriting(self):
