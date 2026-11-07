@@ -25,6 +25,7 @@ import time
 
 from .events import _HOOK_EVENTS, hook_observation, interpret
 from .background_observer import ProcessPulse
+from .background_scheduler import SchedulerPulse
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
 
@@ -180,6 +181,11 @@ class MonitorHealth:
     process_visibility_races: int | None = None
     process_identity_changes: int | None = None
     process_sample_age_seconds: int | None = None
+    scheduler_services: int | None = None
+    scheduler_with_tasks: int | None = None
+    scheduler_uncertain: int | None = None
+    scheduler_transitions: int | None = None
+    scheduler_sample_age_seconds: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -215,7 +221,15 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             "process_roots", "process_descendants", "process_visibility_races",
             "process_identity_changes", "process_sample_age_seconds",
         }
-        versions = (allowed, allowed | extension, allowed | extension | process_extension)
+        scheduler_extension = {
+            "scheduler_services", "scheduler_with_tasks",
+            "scheduler_uncertain", "scheduler_transitions",
+            "scheduler_sample_age_seconds",
+        }
+        versions = (
+            allowed, allowed | extension, allowed | extension | process_extension,
+            allowed | extension | process_extension | scheduler_extension,
+        )
         if not isinstance(obj, dict) or set(obj) not in versions:
             return None
         counts = ("accepted", "rejected", "observed_active",
@@ -247,6 +261,21 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             if len(set(counts_present)) != 1:
                 return None
             if sample_age is None and any(counts_present):
+                return None
+        if scheduler_extension <= obj.keys():
+            for key in scheduler_extension:
+                value = obj[key]
+                if value is not None and (
+                    type(value) is not int or not 0 <= value <= 2**31
+                ):
+                    return None
+            if (obj["scheduler_sample_age_seconds"] is None
+                    and any(obj[k] is not None for k in scheduler_extension
+                            if k != "scheduler_sample_age_seconds")):
+                return None
+            if (obj["scheduler_services"] is not None and
+                obj["scheduler_with_tasks"] is not None and
+                obj["scheduler_with_tasks"] > obj["scheduler_services"]):
                 return None
         # Reject inconsistent counts instead of claiming spurious delivery.
         if extension <= obj.keys():
@@ -362,6 +391,7 @@ class LocalMonitor:
             self._last_event_at: float | None = None
             self._process_lock = Lock()
             self._process_pulse: ProcessPulse | None = None
+            self._scheduler_pulse: SchedulerPulse | None = None
             self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._listener.bind(str(self.path))
             self.path.chmod(0o600)
@@ -477,18 +507,37 @@ class LocalMonitor:
         with self._process_lock:
             self._process_pulse = pulse
 
+    def update_scheduler_pulse(self, pulse: SchedulerPulse) -> None:
+        """Store bounded aggregates; no timer names or service metadata."""
+        if not isinstance(pulse, SchedulerPulse) or pulse.coverage_verified:
+            raise ValueError("invalid_scheduler_pulse")
+        with self._process_lock:
+            self._scheduler_pulse = pulse
+
     def _reply_health(self, connection: socket.socket) -> None:
         """No session fingerprints, PIDs, commands or prompts leave receiver."""
         now = time.monotonic()
         items = self.registry.observed_work(now=now)
         with self._process_lock:
             pulse = self._process_pulse
+            scheduler = self._scheduler_pulse
         # A stale process census is no evidence of current activity or safety.
         elapsed = max(0.0, now - pulse.observed_at) if pulse is not None else None
         age = min(2**31, math.ceil(elapsed)) if elapsed is not None else None
         # Compare full-precision time and round displayed age upward: never
         # present a sample older than 120s as a fresh-looking 120-second one.
         fresh = elapsed is not None and elapsed <= 120.0
+        scheduler_elapsed = (
+            max(0.0, now - scheduler.observed_at)
+            if scheduler is not None else None
+        )
+        scheduler_fresh = (
+            scheduler_elapsed is not None and scheduler_elapsed <= 180.0
+        )
+        scheduler_age = (
+            min(2**31, math.ceil(scheduler_elapsed))
+            if scheduler_elapsed is not None else None
+        )
         states = Counter(item.state.value for item in items)
         response = {
             "accepted": self.accepted,
@@ -515,6 +564,11 @@ class LocalMonitor:
                 pulse.identity_changes if fresh else None
             ),
             "process_sample_age_seconds": age,
+            "scheduler_services": scheduler.services if scheduler_fresh else None,
+            "scheduler_with_tasks": scheduler.with_tasks if scheduler_fresh else None,
+            "scheduler_uncertain": scheduler.uncertain if scheduler_fresh else None,
+            "scheduler_transitions": scheduler.transitions if scheduler_fresh else None,
+            "scheduler_sample_age_seconds": scheduler_age,
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
         if len(packet) <= MAX_HEALTH_BYTES:
