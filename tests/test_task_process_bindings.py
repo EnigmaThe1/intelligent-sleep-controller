@@ -121,6 +121,39 @@ class TaskProcessBindingsTests(unittest.TestCase):
             reg.register(OWNER, TASK, proc(start=99))
         self.assertEqual(reg.summary().registered, 1)
 
+    def test_same_process_identity_cannot_be_registered_under_other_task(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        with self.assertRaisesRegex(ValueError, "process_identity_already_bound"):
+            reg.register("c" * 32, "d" * 32, proc())
+        self.assertEqual(reg.summary().registered, 1)
+        self.assertTrue(reg.history_lost)
+        reg.observe(lineage(proc()), now=1)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+        # An unrelated process identity remains independently registrable.
+        reg.register("c" * 32, "d" * 32, proc(pid=102, start=14))
+        self.assertEqual(reg.summary().registered, 2)
+
+    def test_missed_observation_interval_cannot_reestablish_authority(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        reg.observe(lineage(proc()), now=1)
+        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
+        census = reg.observe(lineage(proc()), now=92)
+        self.assertTrue(reg.history_lost)
+        self.assertFalse(census.coverage_verified)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+        reg.observe(lineage(proc()), now=93)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+
+    def test_acceptable_observation_gap_does_not_introduce_false_loss(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        reg.observe(lineage(proc()), now=1)
+        reg.observe(lineage(proc()), now=91)
+        self.assertFalse(reg.history_lost)
+        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
+
     def test_bounded_capacity_preserves_failure_signal(self):
         reg = TaskProcessBindings()
         for n in range(256):
