@@ -194,6 +194,58 @@ class MonitorHealthTests(unittest.TestCase):
                 self.assertIsNone(failed["process_visibility_races"])
                 self.assertFalse(failed["coverage_verified"])
 
+    def test_scheduler_aggregate_health_and_stale_fallback(self):
+        from isc.background_scheduler import SchedulerPulse
+        from unittest.mock import Mock, patch
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp) as monitor:
+                observed = time.monotonic()
+                monitor.update_scheduler_pulse(SchedulerPulse(
+                    services=21, with_tasks=1, uncertain=20,
+                    transitions=None, observed_at=observed,
+                ))
+                peer = Mock()
+                monitor._reply_health(peer)
+                health = json.loads(peer.sendall.call_args.args[0])
+                self.assertEqual(health["scheduler_services"], 21)
+                self.assertEqual(health["scheduler_with_tasks"], 1)
+                self.assertEqual(health["scheduler_uncertain"], 20)
+                self.assertIsNone(health["scheduler_transitions"])
+                self.assertFalse(health["coverage_verified"])
+                self.assertNotIn("ControlGroup", health)
+                peer.reset_mock()
+                with patch("isc.receiver.time.monotonic",
+                           return_value=observed + 181):
+                    monitor._reply_health(peer)
+                stale = json.loads(peer.sendall.call_args.args[0])
+                self.assertIsNone(stale["scheduler_services"])
+                self.assertIsNone(stale["scheduler_with_tasks"])
+                self.assertIn(stale["scheduler_sample_age_seconds"], (181, 182))
+
+    def test_scheduler_health_roundtrip_over_socket(self):
+        from isc.background_scheduler import SchedulerPulse
+        with TemporaryDirectory() as tmp:
+            with LocalMonitor(runtime_dir=tmp, advertise=True) as monitor:
+                monitor.update_scheduler_pulse(SchedulerPulse(
+                    services=2, with_tasks=1, uncertain=1,
+                    transitions=0, observed_at=time.monotonic(),
+                ))
+                thread = threading.Thread(
+                    target=monitor.run_for, args=(0.4,), daemon=True,
+                )
+                thread.start()
+                try:
+                    health = read_monitor_health(runtime_dir=tmp)
+                    self.assertIsNotNone(health)
+                    self.assertEqual(health.scheduler_services, 2)
+                    self.assertEqual(health.scheduler_with_tasks, 1)
+                    self.assertEqual(health.scheduler_uncertain, 1)
+                    self.assertEqual(health.scheduler_transitions, 0)
+                    self.assertFalse(health.coverage_verified)
+                finally:
+                    thread.join(timeout=2)
+                    self.assertFalse(thread.is_alive())
+
     def test_health_protocol_rejects_forged_process_counts(self):
         from unittest.mock import MagicMock, patch
         raw = {
