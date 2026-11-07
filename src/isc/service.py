@@ -14,6 +14,7 @@ import time
 
 from .receiver import LocalMonitor
 from .background_observer import BackgroundProcessObserver
+from .background_scheduler import BackgroundSchedulerObserver
 from .settings import ModeConfigError, read_mode
 
 
@@ -59,6 +60,7 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
     try:
         with LocalMonitor(advertise=True) as receiver:
             observer: BackgroundProcessObserver | None = None
+            scheduler: BackgroundSchedulerObserver | None = None
             if max_seconds == 0:
                 candidate = BackgroundProcessObserver(receiver.update_process_pulse)
                 try:
@@ -68,6 +70,16 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
                     pass
                 else:
                     observer = candidate
+                candidate_scheduler = BackgroundSchedulerObserver(
+                    receiver.update_scheduler_pulse,
+                )
+                try:
+                    candidate_scheduler.start()
+                except (OSError, RuntimeError):
+                    # No scheduler data is authoritative; keep it UNKNOWN.
+                    pass
+                else:
+                    scheduler = candidate_scheduler
             try:
                 return _serve_receiver(
                     receiver, deadline=deadline, poll_seconds=poll_seconds,
@@ -76,6 +88,8 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
             finally:
                 if observer is not None:
                     observer.close()
+                if scheduler is not None:
+                    scheduler.close()
     except (OSError, PermissionError, ValueError) as exc:
         # No socket ownership, arguments or config paths in the error.
         raise MonitorUnavailable("receiver_unavailable") from None
