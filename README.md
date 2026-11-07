@@ -118,6 +118,42 @@ These commands only display options and perform a read-only preflight. **No slee
 
 **Manual operation is distinct from automatic ISC modes.** A deliberate manual suspend remains possible in OFF or MONITOR; selecting OFF only disables ISC-initiated **automatic** suspend. ON is still not implemented, and ISC still cannot assert coverage of all background work. The hardware can have resume problems even when the OS accepts a suspend request. Code and CI tests use mocks and never sleep a test machine.
 
+### GNOME Show Apps launcher (separate from login autostart)
+
+ISC's monitor service is intentionally headless. The top-bar tray is a
+**separate application process**, so a running `isc-monitor.service` does not
+prove a tray icon exists.
+
+To register ISC in GNOME's **Show Apps** menu for the current user:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc app --install --confirm
+```
+
+Search for **Intelligent Sleep Controller**, then select it. Its launcher
+opens a **visible GTK3 application window**, which works independently of
+the optional Ayatana/AppIndicator bindings. The window shows MONITOR/OFF,
+aggregate receiver and process status, a manual OFF/MONITOR selector and an
+explicit **Start Tray Icon** button. It never offers automatic ON, and
+does not suspend, hibernate, change a power profile or activate Keep Awake
+on its own. The window needs the `python3-gi` and Gtk3 runtime packages,
+but does not require an AppIndicator binding just to appear.
+
+Use `isc app` to inspect the launcher, or
+`isc app --uninstall --confirm` to remove **only** the ISC-owned
+application menu entry. Existing unrelated desktop files are preserved,
+and older ISC-owned launchers can be removed after moving Python/source
+paths. No sudo or GNOME settings edits are needed. The launcher stays
+available across login sessions, but points to this checkout; reinstall
+after intentionally moving its Python interpreter or source root.
+
+Installing this menu entry **does not turn on login autostart**. To start
+the tray on login, use the separately controlled
+`isc autostart --startup enable --confirm` only after checking
+`isc tray-check`. GNOME Shell may require an enabled AppIndicator extension
+to display a running indicator. The graphical window remains available
+even if the tray extension is absent.
+
 ### Optional system-tray icon (GNOME/AppIndicator)
 
 For a status-area menu like Ubuntu top-bar AppIndicator icons, ISC includes an optional **GTK3 + AyatanaAppIndicator** frontend. The CLI remains independent of all graphical libraries. Test local availability without opening the tray or installing anything:
@@ -125,6 +161,11 @@ For a status-area menu like Ubuntu top-bar AppIndicator icons, ISC includes an o
 ```bash
 PYTHONPATH=src /usr/bin/python3 -m isc tray-check
 ```
+
+The GNOME application menu launcher is distinct from the tray and can open
+a window without AppIndicator support. `isc tray-check` verifies Python
+bindings and a graphical session, but it cannot independently guarantee
+the GNOME Shell extension has registered an indicator.
 
 If the diagnostic reports missing bindings, Ubuntu packages commonly include `python3-gi`, `gir1.2-gtk-3.0`, and `gir1.2-ayatanaappindicator3-0.1`. GNOME Shell needs an enabled AppIndicator/KStatusNotifierItem extension for the icon to appear.
 
