@@ -36,7 +36,7 @@ class GnomeInhibitorTests(unittest.TestCase):
         self.assertEqual(flags, ["4", "8"])
         for c in call.call_args_list:
             self.assertEqual(c.args[0][0:2], ("gdbus", "call"))
-            self.assertIn("IsInhibited", c.args[0])
+            self.assertIn("org.gnome.SessionManager.IsInhibited", c.args[0])
             self.assertEqual(c.kwargs["timeout"], 3.0)
             self.assertNotIn("shell", c.kwargs)
 
