@@ -43,7 +43,9 @@ class BackgroundObserverTests(unittest.TestCase):
         self.assertFalse(any(p.coverage_verified for p in pulses))
         self.assertNotIn("claude", str(pulses))
         self.assertNotIn("python3", str(pulses))
-        self.assertNotIn("777", str(pulses))
+        self.assertNotIn("start_ticks=", str(pulses))
+        self.assertNotIn("parent_pid=", str(pulses))
+        self.assertNotIn("pid=", str(pulses))
 
     def test_failed_census_is_unknown_and_breaks_identity_continuity(self):
         samples = iter((snapshot(), None, snapshot()))
