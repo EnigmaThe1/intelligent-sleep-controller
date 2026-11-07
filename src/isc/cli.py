@@ -310,10 +310,12 @@ def check() -> int:
             scheduled_work_safe=False,
             work_items=tuple(
                 WorkItem(
-                    identifier=f"process_{candidate.pid}",
+                    identifier=f"process_candidate_{index}",
                     state=WorkState.UNKNOWN,
                 )
-                for candidate in (scan.candidates if scan is not None else ())
+                for index, _candidate in enumerate(
+                    (scan.candidates if scan is not None else ()), start=1
+                )
             ),
         )
     )
