@@ -154,27 +154,27 @@ class ScheduledWorkTests(unittest.TestCase):
 
     def test_timer_association_parser_success_and_unknown(self):
         names = ("one.timer", "two.timer")
-        raw = "Id=one.timer\\nUnit=one.service\\n\\nId=two.timer\\nUnit=\\n"
+        raw = "Id=one.timer\nUnit=one.service\n\nId=two.timer\nUnit=\n"
         counts = parse_timer_associations(raw, names)
         self.assertEqual((counts.timers_listed, counts.services_resolved,
                           counts.unresolved), (2, 1, 1))
         self.assertFalse(counts.coverage_verified)
         self.assertNotIn("one.service", repr(counts))
         for invalid in (
-            "Id=one.timer\\nUnit=one.service",
-            "Id=one.timer\\nUnit=one.timer\\n\\nId=two.timer\\nUnit=two.service",
-            "Id=one.timer\\nUnit=one.service\\n\\nId=one.timer\\nUnit=two.service",
-            "Id=one.timer\\nUnit=one.service\\nExtra=bad\\n\\nId=two.timer\\nUnit=",
+            "Id=one.timer\nUnit=one.service",
+            "Id=one.timer\nUnit=one.timer\n\nId=two.timer\nUnit=two.service",
+            "Id=one.timer\nUnit=one.service\n\nId=one.timer\nUnit=two.service",
+            "Id=one.timer\nUnit=one.service\nExtra=bad\n\nId=two.timer\nUnit=",
         ):
             self.assertIsNone(parse_timer_associations(invalid, names))
         self.assertEqual(parse_timer_associations("", ()).timers_listed, 0)
 
     def test_timer_association_queries_use_systemd_show_only(self):
         with patch("isc.scheduled_work._capture", side_effect=[
-            "one.timer loaded active waiting Timer\\n",
-            "Id=one.timer\\nUnit=other.service\\n",
-            "two.timer loaded active waiting Timer\\n",
-            "Id=two.timer\\nUnit=two.service\\n",
+            "one.timer loaded active waiting Timer\n",
+            "Id=one.timer\nUnit=other.service\n",
+            "two.timer loaded active waiting Timer\n",
+            "Id=two.timer\nUnit=two.service\n",
         ]) as capture:
             system, user = read_timer_associations()
         self.assertEqual(system.services_resolved, 1)
@@ -192,7 +192,7 @@ class ScheduledWorkTests(unittest.TestCase):
         self.assertIsNone(_timer_names("bad output"))
         self.assertIsNone(parse_timer_associations(None, ("x.timer",)))
         with patch("isc.scheduled_work._capture", side_effect=[
-            None, "one.timer loaded active waiting Timer\\n", None,
+            None, "one.timer loaded active waiting Timer\n", None,
         ]):
             system, user = read_timer_associations()
         self.assertIsNone(system)
