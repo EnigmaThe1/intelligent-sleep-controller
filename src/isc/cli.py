@@ -11,6 +11,7 @@ from typing import Sequence
 
 from . import __version__
 from .gnome import read_gnome_idle_ms
+from .gnome_inhibitors import read_gnome_inhibit_flags
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_diagnostics import check_hook_delivery
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
@@ -167,6 +168,23 @@ def idle() -> int:
     print("User idle time is NOT proof that background work has stopped.")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     return 0
+
+
+def gnome_inhibitors_cli() -> int:
+    """Observe only the current GNOME session's idle/suspend flags."""
+    flags = read_gnome_inhibit_flags()
+    print("ISC GNOME SESSION INHIBITOR FLAGS — READ ONLY")
+    for name, value in (
+        ("Suspend inhibited", flags.suspend_inhibited),
+        ("Session idle inhibited", flags.idle_inhibited),
+    ):
+        print(f"{name}: {'UNKNOWN' if value is None else ('YES' if value else 'NO')}")
+    print("Only this GNOME session is queried; multi-session coverage is unknown.")
+    print("A 'NO' is not proof of complete system inhibitor coverage.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No inhibitors or system power settings changed.")
+    return 0 if (flags.suspend_inhibited is not None
+                 and flags.idle_inhibited is not None) else 2
 
 
 def inhibitors() -> int:
@@ -936,7 +954,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1049,6 +1067,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return idle()
     if args.command == "inhibitors":
         return inhibitors()
+    if args.command == "gnome-inhibitors":
+        return gnome_inhibitors_cli()
     if args.command == "processes":
         return processes()
     if args.command == "check":
