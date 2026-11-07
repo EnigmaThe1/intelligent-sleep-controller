@@ -38,6 +38,7 @@ from .native_controls import (
 from .native_sleep import assess_native_sleep, request_terminal_sleep
 from .native_observers import read_native_activity
 from .session_census import read_session_census
+from .service_invocations import read_service_invocations, compare_service_invocations
 from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_timer_associations
 from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
@@ -785,6 +786,40 @@ def native_activity_cli() -> int:
 
 
 
+def service_invocations_cli(*, seconds: float) -> int:
+    """Compare systemd service activation IDs without printing identities."""
+    if not math.isfinite(seconds) or not (0 <= seconds <= 60):
+        print("Service invocation observation interval must be 0–60 seconds.")
+        return 2
+    first = read_service_invocations()
+    if seconds:
+        time.sleep(seconds)
+    second = read_service_invocations()
+    print("ISC SYSTEMD SERVICE INVOCATION COMPARISON — READ ONLY")
+    missing = False
+    for label, before, after in (
+        ("System", first[0], second[0]),
+        ("User", first[1], second[1]),
+    ):
+        delta = compare_service_invocations(before, after)
+        if delta is None:
+            missing = True
+            print(f"{label}: UNKNOWN (service invocation evidence unavailable)")
+        else:
+            print(
+                f"{label}: retained invocation={delta.retained}; "
+                f"changed invocation={delta.changed}; "
+                f"unknown identity={delta.unknown}; "
+                f"services appeared={delta.appeared}; "
+                f"disappeared={delta.disappeared}"
+            )
+    print("Changed or missing invocation IDs do not prove job completion.")
+    print("Unsampled activations, detached jobs and other schedulers remain unknown.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No services or system configuration changed.")
+    return 2 if missing else 0
+
+
 def timer_service_watch_cli(*, seconds: float) -> int:
     """Observe transient per-service transitions without revealing identity."""
     if not math.isfinite(seconds) or not (0 <= seconds <= 60):
@@ -1005,7 +1040,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1053,6 +1088,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return timer_task_watch_cli(seconds=args.seconds)
     if args.command == "timer-service-watch":
         return timer_service_watch_cli(seconds=args.seconds)
+    if args.command == "service-invocations":
+        return service_invocations_cli(seconds=args.seconds)
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "sessions":
