@@ -127,8 +127,20 @@ class TaskProcessBindings:
             visible += 1
             # Snapshot descendant set is based on a partial same-UID inventory.
             # It cannot assert absence of detached or cross-UID child work.
+            def belongs_to_root(node: ProcessIdentity) -> bool:
+                # Include grandchildren without following an unbounded or
+                # cyclic parent chain in a malformed/partial snapshot.
+                parent = node.parent_pid
+                seen: set[int] = {node.pid}
+                while parent in by_pid and parent not in seen:
+                    if parent == task.root_pid:
+                        return True
+                    seen.add(parent)
+                    parent = by_pid[parent].parent_pid
+                return False
+
             has_child = any(
-                node.pid != task.root_pid and node.parent_pid == task.root_pid
+                node.pid != task.root_pid and belongs_to_root(node)
                 for node in snapshot.descendants
             )
             children += int(has_child)
@@ -136,7 +148,10 @@ class TaskProcessBindings:
                 task.owner_token, task.task_token, task.root_pid,
                 task.root_start_ticks, task.root_name,
                 child_identity_seen=task.child_identity_seen or has_child,
-                uncertain=(task.uncertain or self._history_lost),
+                # A previously observed child disappearing cannot be
+                # interpreted as finished; detached children may persist.
+                uncertain=(task.uncertain or self._history_lost
+                           or (task.child_identity_seen and not has_child)),
                 last_observed=float(now),
             )
         self._latest_visible, self._latest_missing = visible, missing
