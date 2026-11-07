@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelligent-sleep-controller"
+version = "0.1.0.dev0"
+description = "Local-first safe sleep decision foundation for Linux"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = []
+
+[project.scripts]
+isc = "isc.cli:main"
+smart-sleep = "isc.cli:main"  # backward-compatible alias
+
+[tool.setuptools.packages.find]
+where = ["src"]
