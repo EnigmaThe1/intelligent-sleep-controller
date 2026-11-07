@@ -39,6 +39,17 @@ class ScheduledWorkTests(unittest.TestCase):
         self.assertEqual(info.activating_services, 1)
         self.assertEqual(info.waiting_timers, 0)
 
+    def test_documented_service_maintenance_and_refreshing_are_parsed(self):
+        raw = (
+            r"dbus\x2dtest.service loaded refreshing running Refreshing service"
+            + "\n"
+            + "custom.service loaded maintenance dead Maintenance underway\n"
+        )
+        result = parse_unit_states(raw, kind="service")
+        self.assertIsNotNone(result)
+        self.assertEqual(result.listed, 2)
+        self.assertFalse(result.coverage_verified)
+
     def test_empty_successful_output_is_zero_but_never_verified(self):
         for kind in ("timer", "service"):
             info = parse_unit_states("", kind=kind)
