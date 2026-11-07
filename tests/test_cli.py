@@ -164,9 +164,36 @@ class CLITests(unittest.TestCase):
             self.assertEqual(main(["check"]), 0)
         text = output.getvalue()
         self.assertIn("Process candidates requiring lifecycle verification: 1", text)
-        self.assertIn("work_unknown:process_67", text)
+        self.assertIn("work_unknown:process_candidate_1", text)
+        self.assertNotIn("process_67", text)
         self.assertIn("DO NOT AUTO-SUSPEND", text)
 
+
+    @patch("isc.cli.read_session_census", return_value=None)
+    @patch("isc.cli.read_gnome_inhibit_flags")
+    @patch("isc.cli.read_process_candidates")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=1000)
+    def test_check_anonymises_multiple_process_pids_without_weakening_blockers(
+        self, idle, inhibitors, candidates, gnome, sessions,
+    ):
+        from isc.gnome_inhibitors import GnomeInhibitFlags
+        from isc.processes import ProcessCandidate, ProcessScan
+        gnome.return_value = GnomeInhibitFlags(False, False)
+        candidates.return_value = ProcessScan((
+            ProcessCandidate(123456, "private-workload"),
+            ProcessCandidate(987654, "another-private-workload"),
+        ))
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        result = output.getvalue()
+        self.assertIn("work_unknown:process_candidate_1", result)
+        self.assertIn("work_unknown:process_candidate_2", result)
+        self.assertNotIn("123456", result)
+        self.assertNotIn("987654", result)
+        self.assertNotIn("private-workload", result)
+        self.assertIn("Verdict: DO NOT AUTO-SUSPEND", result)
 
     @patch("isc.cli.read_hook_payload")
     def test_hook_probe_does_not_print_private_fields(self, parser):
