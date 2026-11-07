@@ -36,7 +36,7 @@ from .native_controls import (
 )
 from .native_sleep import assess_native_sleep, request_terminal_sleep
 from .native_observers import read_native_activity
-from .scheduled_work import read_scheduled_work
+from .scheduled_work import read_scheduled_work, read_timer_unit_files
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -691,6 +691,27 @@ def native_activity_cli() -> int:
 
 
 
+def timer_files_cli() -> int:
+    """Read-only installed timer definitions; never an all-schedulers claim."""
+    system, user = read_timer_unit_files()
+    print("ISC INSTALLED TIMER FILES — READ ONLY")
+    for label, counts in (("System timer files", system), ("User timer files", user)):
+        if counts is None:
+            print(f"{label}: UNKNOWN (query unavailable or ambiguous)")
+        else:
+            print(
+                f"{label}: {counts.listed} installed definitions; "
+                f"{counts.enabled} enabled, {counts.disabled} disabled, "
+                f"{counts.other} other"
+            )
+    print("Installed definitions may be unloaded, inactive, transient or unused.")
+    print("Timer files do not prove when jobs start, finish or can wake the host.")
+    print("Cron, at, user applications and remote schedules are not inventoried.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No system settings, services or timers changed.")
+    return 0
+
+
 def scheduled_work_cli() -> int:
     """Read-only, partial systemd timer and service state census."""
     data = read_scheduled_work()
@@ -730,7 +751,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "timer-files", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -764,6 +785,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return process_watch_cli(seconds=args.seconds)
     if args.command == "scheduled-work":
         return scheduled_work_cli()
+    if args.command == "timer-files":
+        return timer_files_cli()
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
