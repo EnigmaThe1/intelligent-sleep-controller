@@ -32,6 +32,7 @@ from .native_controls import (
 )
 from .native_sleep import assess_native_sleep, request_terminal_sleep
 from .native_observers import read_native_activity
+from .scheduled_work import read_scheduled_work
 from .user_service import (
     UserServiceError, inspect_user_service, modify_user_service,
 )
@@ -659,6 +660,38 @@ def native_activity_cli() -> int:
 
 
 
+def scheduled_work_cli() -> int:
+    """Read-only, partial systemd timer and service state census."""
+    data = read_scheduled_work()
+    print("ISC SCHEDULED WORK CENSUS — READ ONLY")
+    for label, kind, evidence in (
+        ("System timers", "timers", data.system_timers),
+        ("User timers", "timers", data.user_timers),
+        ("System services", "services", data.system_services),
+        ("User services", "services", data.user_services),
+    ):
+        if evidence is None:
+            print(f"{label}: UNKNOWN (query unavailable or ambiguous)")
+        elif kind == "timers":
+            print(
+                f"{label}: {evidence.listed} listed; "
+                f"{evidence.waiting_timers} waiting"
+            )
+        else:
+            print(
+                f"{label}: {evidence.listed} listed; "
+                f"{evidence.running_services} running, "
+                f"{evidence.activating_services} activating"
+            )
+    print("Timer states do not identify the jobs they activate.")
+    print("Running services may be unrelated to timers; service children")
+    print("can continue after the parent unit appears inactive.")
+    print("Unloaded timers, cron, at, remote jobs and app schedulers are unverified.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No system settings or services changed.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
@@ -666,7 +699,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "hook-self-test", "process-watch"),
+        choices=("status", "idle", "inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "scheduled-work", "hook-self-test", "process-watch"),
         default="status",
     )
     parser.add_argument(
@@ -687,6 +720,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "process-watch":
         return process_watch_cli(seconds=args.seconds)
+    if args.command == "scheduled-work":
+        return scheduled_work_cli()
     if args.command == "native-activity":
         return native_activity_cli()
     if args.command == "monitor-service":
