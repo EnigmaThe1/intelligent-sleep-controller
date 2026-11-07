@@ -115,10 +115,10 @@ class ScheduledWorkTests(unittest.TestCase):
 
     def test_timer_file_states_and_unloaded_definitions(self):
         raw = (
-            "apt-daily.timer enabled enabled\\n"
-            "backup@.timer disabled disabled\\n"
-            "dbus\\\\x2dtest.timer static -\\n"
-            "ephemeral.timer generated -\\n"
+            "apt-daily.timer enabled enabled\n"
+            "backup@.timer disabled disabled\n"
+            "dbus\\\\x2dtest.timer static -\n"
+            "ephemeral.timer generated -\n"
         )
         result = parse_timer_unit_files(raw)
         self.assertIsNotNone(result)
@@ -129,16 +129,16 @@ class ScheduledWorkTests(unittest.TestCase):
     def test_timer_file_malformed_unknown_and_duplicate(self):
         cases = (None, "not a valid output", "x.service enabled enabled",
                  "x.timer custom enabled",
-                 "x.timer enabled enabled\\nx.timer enabled enabled",
+                 "x.timer enabled enabled\nx.timer enabled enabled",
                  "x.timer enabled invalid-preset",
-                 "\\n".join("x.timer enabled" for _ in range(4097)))
+                 "\n".join("x.timer enabled" for _ in range(4097)))
         for raw in cases:
             with self.subTest(raw=repr(raw)[:48]):
                 self.assertIsNone(parse_timer_unit_files(raw))
 
     def test_timer_file_queries_do_not_mutate_system_state(self):
         with patch("isc.scheduled_work._capture",
-                   side_effect=["a.timer enabled enabled\\n", None]) as capture:
+                   side_effect=["a.timer enabled enabled\n", None]) as capture:
             system, user = read_timer_unit_files()
         self.assertEqual(system.enabled, 1)
         self.assertIsNone(user)
