@@ -81,7 +81,9 @@ class BackgroundSchedulerTests(unittest.TestCase):
         )
         observer._run()
         self.assertEqual(pulses[1].transitions, 1)
+        self.assertEqual(pulses[1].invocation_changes, 1)
         self.assertEqual(pulses[1].uncertain_transitions, 0)
+        self.assertEqual(pulses[1].invocation_changes, 0)
         self.assertFalse(pulses[1].coverage_verified)
 
     def test_missing_activation_identity_is_uncertain_not_safe(self):
@@ -124,7 +126,9 @@ class BackgroundSchedulerTests(unittest.TestCase):
         )
         observer._run()
         self.assertIsNone(pulses[1].services)
+        self.assertIsNone(pulses[1].invocation_changes)
         self.assertIsNone(pulses[2].transitions)
+        self.assertIsNone(pulses[2].invocation_changes)
 
     def test_unknown_task_count_is_never_zero(self):
         pulses = []
