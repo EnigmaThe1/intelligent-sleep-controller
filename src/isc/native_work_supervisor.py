@@ -20,6 +20,7 @@ from .policy import WorkState
 from .process_lifecycle import ProcessIdentity, ProcessLineage, read_process_lineage
 from .service_process_correlation import ServiceProcessEvidence, _SERVICE
 from .service_process_observer import observe_service_process
+from .native_service_enrollment import discover_native_service_process, NativeServiceProcess
 from .task_process_bindings import TaskProcessBindings
 
 _MAX_JOBS = 256
@@ -74,6 +75,35 @@ class NativeWorkSupervisor:
             raise ValueError("invalid_supervised_work_registration")
         self._bindings.register(owner_token, task_token, root)
         self._scopes[(owner_token, task_token)] = (service, scope)
+
+    def register_native_service(
+        self, owner_token: str, task_token: str, *, service: str,
+        scope: str,
+        discovery: Callable[..., NativeServiceProcess | None]
+        = discover_native_service_process,
+    ) -> bool:
+        """Enroll only a process independently verified from systemd.
+
+        This method has no socket or CLI route. A successful native
+        service-to-process match is NOT proof of application task ownership.
+        A failed check performs no registration and never clears uncertainty.
+        """
+        if not callable(discovery):
+            return False
+        try:
+            evidence = discovery(service, scope=scope)
+            if (not isinstance(evidence, NativeServiceProcess)
+                    or evidence.coverage_verified
+                    or evidence.task_owner_authenticated
+                    or evidence.service != service or evidence.scope != scope):
+                return False
+            self.register(
+                owner_token, task_token, evidence.identity,
+                service=service, scope=scope,
+            )
+            return True
+        except (OSError, TypeError, ValueError, RuntimeError):
+            return False
 
     def observe(self, *, now: float) -> SupervisionSummary:
         """Acquire a fresh scan and evaluate registered workloads."""
