@@ -60,6 +60,15 @@ def within_cgroup(actual: str, expected: str) -> bool | None:
     return actual == scope or actual.startswith(scope + "/")
 
 
+def _read_cgroup(path: Path) -> str | None:
+    """Read bounded procfs membership without following a cgroup symlink."""
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        return parse_cgroup_v2(os.read(fd, _MAX_CGROUP_BYTES + 1))
+    finally:
+        os.close(fd)
+
+
 def observe_cgroup_membership(
     identity: ProcessIdentity, service_cgroup: str, *,
     proc_root: str | Path = "/proc", uid: int | None = None,
@@ -91,18 +100,17 @@ def observe_cgroup_membership(
             identity.pid, identity.start_ticks, identity.name,
         ):
             return unknown
-        fd = os.open(
-            directory / "cgroup",
-            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-        )
-        try:
-            chunks = os.read(fd, _MAX_CGROUP_BYTES + 1)
-        finally:
-            os.close(fd)
-        actual = parse_cgroup_v2(chunks)
+        first_membership = _read_cgroup(directory / "cgroup")
+        middle = _read_stat(directory / "stat", identity.pid)
+        second_membership = _read_cgroup(directory / "cgroup")
         after = _read_stat(directory / "stat", identity.pid)
-        if before != after or actual is None:
+        # A process can migrate between cgroups without changing PID/starttime.
+        # Stable identity and two matching membership observations are both
+        # required; even then this is not continuous or complete coverage.
+        if (before != middle or middle != after
+                or first_membership is None
+                or first_membership != second_membership):
             return unknown
-        return CgroupMembership(within_cgroup(actual, service_cgroup))
+        return CgroupMembership(within_cgroup(first_membership, service_cgroup))
     except (OSError, UnicodeError, ValueError, TypeError):
         return unknown
