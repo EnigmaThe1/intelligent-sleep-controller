@@ -14,6 +14,7 @@ from .gnome import read_gnome_idle_ms
 from .gnome_inhibitors import read_gnome_inhibit_flags
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_diagnostics import check_hook_delivery
+from .agent_integration_readiness import inspect_agent_integration
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
 from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
@@ -508,6 +509,34 @@ def hook_plan() -> int:
     print("No files modified. No hook commands executed.")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     return rc
+
+
+def agent_integration() -> int:
+    """Read-only real receiver and optional agent-hook readiness summary."""
+    print("ISC CODING-AGENT INTEGRATION — READ ONLY")
+    for row in inspect_agent_integration():
+        print(f"{row.source}:")
+        print(f"  ISC hook configuration: {row.config_state}")
+        if row.configured_hook_events is None:
+            print("  configured events: UNKNOWN")
+        else:
+            print(f"  configured events: {row.configured_hook_events}")
+        print(
+            "  sender-claimed observations since monitor start: "
+            + ("UNKNOWN" if row.observed_events is None
+               else str(row.observed_events))
+        )
+        print(
+            "  receiver: " + (
+                "AVAILABLE" if row.receiver_active else "UNAVAILABLE"
+            )
+        )
+    print("Counts exclude synthetic diagnostic probes.")
+    print("Configured hooks do NOT prove delivery or application identity.")
+    print("Accepted observations do NOT prove task ownership, completion or coverage.")
+    print("No agent, hooks, processes, or power settings modified.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
 
 
 def hook_change(*, source: str, operation: str, confirm: bool) -> int:
@@ -1093,7 +1122,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1230,6 +1259,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return monitor(seconds=args.seconds, self_test=args.self_test, advertise=args.advertise)
     if args.command == "hook-plan":
         return hook_plan()
+    if args.command == "agent-integration":
+        return agent_integration()
     if args.command in ("hook-enable", "hook-disable"):
         if args.source is None:
             parser.error("select --source claude_code or --source codex")
