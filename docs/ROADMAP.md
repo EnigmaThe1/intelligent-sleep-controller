@@ -31,6 +31,7 @@
 - [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
 - [x] Same-user read-only /proc CPU-tick progress tracking for selected process identities with PID-reuse protection; MONITOR aggregates indicate execution only, never authenticated task ownership, completion, or safe idleness
 - [x] Opt-in in-process lifecycle-claim correlation with previously enrolled native service process evidence: external waiting remains busy; stop, permission, human-wait and finish claims remain UNKNOWN; no socket registration, owner authentication, completion or automatic suspend
+- [x] Read-only Linux SO_PEERCRED plus double-checked same-UID process identity for optional in-process adapter; require matching fresh systemd-origin native service pin before accepting lifecycle evidence. No listener, external registration, authenticated task ownership or suspension authority.
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
