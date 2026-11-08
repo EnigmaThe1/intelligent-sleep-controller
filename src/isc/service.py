@@ -62,7 +62,10 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
             observer: BackgroundProcessObserver | None = None
             scheduler: BackgroundSchedulerObserver | None = None
             if max_seconds == 0:
-                candidate = BackgroundProcessObserver(receiver.update_process_pulse)
+                candidate = BackgroundProcessObserver(
+                    receiver.update_process_pulse,
+                    on_snapshot=receiver.update_native_lineage,
+                )
                 try:
                     candidate.start()
                 except (OSError, RuntimeError):
