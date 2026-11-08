@@ -21,6 +21,7 @@ from .process_lifecycle import ProcessIdentity, ProcessLineage, read_process_lin
 from .service_process_correlation import ServiceProcessEvidence, _SERVICE
 from .service_process_observer import observe_service_process
 from .native_service_enrollment import discover_native_service_process, NativeServiceProcess
+from .cgroup_subtree import CgroupSubtreeSummary, observe_cgroup_subtree
 from .task_process_bindings import TaskProcessBindings
 
 _MAX_JOBS = 256
@@ -46,13 +47,16 @@ class NativeWorkSupervisor:
         membership_checker: Callable[
             [str, ProcessIdentity, str], ServiceProcessEvidence
         ] | None = None,
+        subtree_checker: Callable[[str], CgroupSubtreeSummary]
+        = observe_cgroup_subtree,
     ) -> None:
         if not callable(lineage_scanner) or (
             membership_checker is not None and not callable(membership_checker)
-        ):
+        ) or not callable(subtree_checker):
             raise ValueError("invalid_supervision_observer")
         self._scanner = lineage_scanner
         self._checker = membership_checker or self._check_membership
+        self._subtree_checker = subtree_checker
         self._bindings = TaskProcessBindings()
         self._scopes: dict[tuple[str, str], tuple[str, str]] = {}
         # Only native enrollments have an independently verified activation pin.
@@ -207,6 +211,24 @@ class NativeWorkSupervisor:
             if any(p is None for p in identities):
                 self._sticky_unknown.add(key)
                 continue
+            # A detached process can remain in the native service cgroup
+            # after reparenting and disappear from the tracked PPID lineage.
+            # Compare counts conservatively: extra processes are unaccounted
+            # work, not harmless noise or evidence of task completion.
+            if key in self._native_pins:
+                pinned, _ = self._native_pins[key]
+                try:
+                    subtree = self._subtree_checker(pinned.cgroup)
+                except Exception:
+                    subtree = None
+                if (not isinstance(subtree, CgroupSubtreeSummary)
+                        or subtree.coverage_verified
+                        or subtree.task_owner_authenticated
+                        or subtree.unknown is not False
+                        or type(subtree.observed_processes) is not int
+                        or subtree.observed_processes != len(identities)):
+                    self._sticky_unknown.add(key)
+                    continue
             try:
                 evidence = tuple(
                     self._checker(service, process, scope)
