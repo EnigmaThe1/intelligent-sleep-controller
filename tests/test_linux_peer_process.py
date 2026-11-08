@@ -64,8 +64,7 @@ class LinuxPeerProcessTests(unittest.TestCase):
         self.assertEqual(lookup.call_count, 2)
         self.assertFalse(found.authenticated_task_owner)
         self.assertFalse(found.coverage_verified)
-        self.assertNotIn("python3", repr(found).split("authenticated")[0].lower()
-                         if False else "irrelevant")  # no public health serialisation
+        # This evidence stays in-process; no health-wire changes are made.
 
     def test_mismatched_uid_rejected_before_proc_lookup(self):
         with socket.socketpair() as pair:
