@@ -2,7 +2,9 @@
 import sys
 from pathlib import Path
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from contextlib import redirect_stdout
+from io import StringIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -111,6 +113,32 @@ class IndependentServiceDiscoveryTests(unittest.TestCase):
         self.assertTrue(all(cmd[:2] == ("systemctl", "--system")
                             for cmd in commands))
         self.assertTrue(all("shell" not in cmd for cmd in commands))
+
+    def test_read_only_cli_reports_aggregate_counts_not_names(self):
+        from isc.cli import main
+        out = StringIO()
+        observations = [
+            IndependentServiceCounts(3, 1, 2, uncertain=False),
+            IndependentServiceCounts(None, None, None),
+        ]
+        with patch("isc.cli.read_independent_services",
+                   side_effect=observations) as reader:
+            with redirect_stdout(out):
+                self.assertEqual(main(["independent-services"]), 0)
+        self.assertEqual(reader.call_count, 2)
+        value = out.getvalue()
+        self.assertIn("other active=2", value)
+        self.assertIn("User: UNKNOWN", value)
+        self.assertIn("Automatic suspension remains disabled", value)
+        self.assertNotIn("alpha.service", value)
+        self.assertNotIn("agent.service", value)
+
+    def test_service_count_is_not_claimed_to_be_task_coverage(self):
+        result = correlate_independent_services("", "", None)
+        self.assertEqual(result.active_services, 0)
+        self.assertEqual(result.other_active, 0)
+        self.assertFalse(result.coverage_verified)
+        self.assertFalse(result.task_owner_authenticated)
 
     def test_invalid_scope_never_accesses_native_state(self):
         capture = Mock()
