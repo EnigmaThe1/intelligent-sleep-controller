@@ -13,6 +13,7 @@ import math
 import time
 
 from .process_lifecycle import ProcessLineage, compare_process_lineage, read_process_lineage
+from .process_cpu_evidence import read_cpu_samples, compare_cpu_samples
 
 DEFAULT_INTERVAL_SECONDS = 30.0
 MAX_OBSERVED_COUNT = 2**31
@@ -27,6 +28,9 @@ class ProcessPulse:
     observed_at: float
     # A partial name-based census can NEVER prove overall workload coverage.
     coverage_verified: bool = False
+    cpu_progressing: int | None = None
+    cpu_unchanged: int | None = None
+    cpu_changed_or_missing: int | None = None
 
 
 class BackgroundProcessObserver:
@@ -39,10 +43,12 @@ class BackgroundProcessObserver:
         interval_seconds: float = DEFAULT_INTERVAL_SECONDS,
         scanner: Callable[[], ProcessLineage | None] = read_process_lineage,
         on_snapshot: Callable[[ProcessLineage | None, float], None] | None = None,
+        cpu_scanner: Callable[..., dict | None] | None = None,
     ) -> None:
         if (
             not callable(publish) or not callable(scanner)
             or (on_snapshot is not None and not callable(on_snapshot))
+            or (cpu_scanner is not None and not callable(cpu_scanner))
             or not isinstance(interval_seconds, (int, float))
             or not math.isfinite(interval_seconds)
             or not 1 <= interval_seconds <= 300
@@ -51,6 +57,7 @@ class BackgroundProcessObserver:
         self._publish = publish
         self._scanner = scanner
         self._on_snapshot = on_snapshot
+        self._cpu_scanner = cpu_scanner or read_cpu_samples
         self._interval = float(interval_seconds)
         self._stop = Event()
         self._thread: Thread | None = None
@@ -80,6 +87,7 @@ class BackgroundProcessObserver:
 
     def _run(self) -> None:
         previous: ProcessLineage | None = None
+        previous_cpu: dict | None = None
         observed_changes = 0
         observed_races = 0
         while not self._stop.is_set():
@@ -90,6 +98,12 @@ class BackgroundProcessObserver:
                 # explicitly unknown and cannot make sleep eligible.
                 current = None
             now = time.monotonic()
+            try:
+                current_cpu = self._cpu_scanner(current) if current is not None else None
+            except Exception:
+                current_cpu = None
+            cpu_progress = compare_cpu_samples(previous_cpu, current_cpu)
+            previous_cpu = current_cpu
             if self._on_snapshot is not None:
                 try:
                     self._on_snapshot(current, now)
@@ -103,6 +117,8 @@ class BackgroundProcessObserver:
                     roots=None, descendants=None,
                     visibility_races=None, identity_changes=None,
                     observed_at=now,
+                    cpu_progressing=None, cpu_unchanged=None,
+                    cpu_changed_or_missing=None,
                 )
             else:
                 observed_races = min(
@@ -123,6 +139,9 @@ class BackgroundProcessObserver:
                     visibility_races=observed_races,
                     identity_changes=observed_changes,
                     observed_at=now,
+                    cpu_progressing=cpu_progress.progressing,
+                    cpu_unchanged=cpu_progress.unchanged,
+                    cpu_changed_or_missing=cpu_progress.changed_or_missing,
                 )
             try:
                 self._publish(pulse)
