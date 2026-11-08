@@ -15,7 +15,7 @@ from .cgroup_membership import CgroupMembership, observe_cgroup_membership
 from .process_lifecycle import ProcessIdentity
 from .service_process_correlation import (
     ServiceProcessCorrelation, ServiceProcessEvidence,
-    _service_row, correlate_service_process,
+    _SERVICE, _service_row, correlate_service_process,
 )
 from .timer_service_lifecycle import (
     ServiceTaskSnapshot, read_service_task_snapshots,
@@ -42,7 +42,10 @@ def observe_service_process(
     unknown = ServiceProcessCorrelation(ServiceProcessEvidence.UNKNOWN)
     if (scope not in ("--system", "--user")
             or not isinstance(service_name, str)
+            or _SERVICE.fullmatch(service_name) is None
             or not isinstance(identity, ProcessIdentity)
+            or type(identity.pid) is not int or identity.pid <= 0
+            or type(identity.start_ticks) is not int or identity.start_ticks <= 0
             or not callable(scanner) or not callable(membership_probe)):
         return unknown
     index = 0 if scope == "--system" else 1
