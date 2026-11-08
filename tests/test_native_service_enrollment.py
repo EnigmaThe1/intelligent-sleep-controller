@@ -11,6 +11,8 @@ from isc.native_service_enrollment import (
     _metadata, _service_query, discover_native_service_process,
 )
 from isc.process_lifecycle import ProcessIdentity
+from isc.native_work_supervisor import NativeWorkSupervisor
+from isc.native_service_enrollment import NativeServiceProcess
 
 SERVICE = "agent.service"
 PID = 145
@@ -112,6 +114,39 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
                 ))
         self.assertIsNone(_metadata(raw() + "MainPID=145\n", SERVICE))
         self.assertIsNone(_metadata(raw(pid=PID, group="/"), SERVICE))
+
+    def test_opt_in_native_registration_not_task_authentication(self):
+        supervisor = NativeWorkSupervisor()
+        evidence = NativeServiceProcess(
+            IDENTITY, SERVICE, "--user", INV_A, CGROUP,
+        )
+        trusted_reader = Mock(return_value=evidence)
+        self.assertTrue(supervisor.register_native_service(
+            "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+            discovery=trusted_reader,
+        ))
+        trusted_reader.assert_called_once_with(SERVICE, scope="--user")
+        summary = supervisor.summary()
+        self.assertEqual(summary.registered, 1)
+        self.assertFalse(summary.task_owner_authenticated)
+        self.assertFalse(summary.coverage_verified)
+        self.assertNotIn(CGROUP, str(summary))
+
+    def test_native_registration_rejects_self_claim_and_mismatched_scope(self):
+        supervisor = NativeWorkSupervisor()
+        first = supervisor.register_native_service(
+            "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+            discovery=lambda *a, **k: None,
+        )
+        self.assertFalse(first)
+        conflicting = NativeServiceProcess(
+            IDENTITY, SERVICE, "--system", INV_A, CGROUP,
+        )
+        self.assertFalse(supervisor.register_native_service(
+            "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+            discovery=lambda *a, **k: conflicting,
+        ))
+        self.assertEqual(supervisor.summary().registered, 0)
 
     def test_command_is_single_unit_read_only(self):
         self.assertEqual(_service_query(SERVICE, "--user"), (
