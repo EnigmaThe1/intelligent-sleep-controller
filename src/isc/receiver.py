@@ -33,6 +33,7 @@ from .process_lifecycle import ProcessIdentity, ProcessLineage
 from .background_scheduler import SchedulerPulse
 from .background_independent_services import IndependentServicePulse
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
+from .native_agent_adapter import AgentSessionBinding, translate_agent_hook
 from .registry import WorkRegistry
 
 MONITOR_DIRECTORY_NAME = "isc-monitor"
@@ -666,6 +667,25 @@ class LocalMonitor:
                 owner_token, task_token, event, peer,
                 sequence=sequence, now=now,
             )
+
+    def observe_bound_agent_hook(
+        self, binding: AgentSessionBinding, observation: HookObservation,
+        connection: socket.socket, *, sequence: int, now: float,
+    ) -> bool:
+        """Future optional in-process agent adapter; NOT the public hook API.
+
+        Binding is supplied by trusted local integration code, never by a
+        hook's claimed session ID alone. Kernel peer identity and pinned native
+        service must still match; ordered events are mandatory. No commands,
+        prompts or app settings are accessed by this method.
+        """
+        event = translate_agent_hook(binding, observation)
+        if event is None:
+            return False
+        return self.observe_ordered_native_peer_lifecycle(
+            binding.owner_token, binding.task_token, event, connection,
+            sequence=sequence, now=now,
+        )
 
     def native_lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
         """Non-authoritative private aggregate, never sleep eligibility."""
