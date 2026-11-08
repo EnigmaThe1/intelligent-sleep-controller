@@ -1,5 +1,6 @@
 """Kernel peer and native lifecycle attribution tests; no real service changes."""
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import socket
 import struct
@@ -48,9 +49,19 @@ def pinned_supervisor(discover=None):
     return supervisor, discovery
 
 
+@contextmanager
+def unix_pair():
+    left, right = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        yield left, right
+    finally:
+        left.close()
+        right.close()
+
+
 class LinuxPeerProcessTests(unittest.TestCase):
     def test_kernel_socketpair_credentials_and_stable_proc_identity(self):
-        with socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM) as pair:
+        with unix_pair() as pair:
             expected = ProcessIdentity(
                 os.getpid(), 1000, os.getppid(), "python3",
             )
@@ -67,7 +78,7 @@ class LinuxPeerProcessTests(unittest.TestCase):
         # This evidence stays in-process; no health-wire changes are made.
 
     def test_mismatched_uid_rejected_before_proc_lookup(self):
-        with socket.socketpair() as pair:
+        with unix_pair() as pair:
             lookup = Mock()
             result = read_linux_peer_process(
                 pair[0], expected_uid=os.getuid() + 1,
@@ -77,7 +88,7 @@ class LinuxPeerProcessTests(unittest.TestCase):
         lookup.assert_not_called()
 
     def test_pid_reuse_or_unavailable_proc_evidence_rejected(self):
-        with socket.socketpair() as pair:
+        with unix_pair() as pair:
             first = ProcessIdentity(os.getpid(), 200, 1, "agent")
             changed = ProcessIdentity(os.getpid(), 201, 1, "agent")
             for samples in ((first, changed), (None, first)):
@@ -103,13 +114,13 @@ class LinuxPeerProcessTests(unittest.TestCase):
         self.assertIsNone(read_linux_peer_process(sock))
 
     def test_process_lookup_exception_is_unknown(self):
-        with socket.socketpair() as pair:
+        with unix_pair() as pair:
             self.assertIsNone(read_linux_peer_process(
                 pair[0], process_lookup=Mock(side_effect=OSError("gone")),
             ))
 
     def test_no_claimed_json_pid_or_token_supported(self):
-        with socket.socketpair() as pair:
+        with unix_pair() as pair:
             self.assertIsNone(read_linux_peer_process(
                 pair[0], process_lookup=123,
             ))
@@ -201,7 +212,7 @@ class NativePeerLifecycleTests(unittest.TestCase):
                     OWNER, TASK, service=SERVICE, scope="--user", discovery=pin,
                 ))
                 monitor.update_native_lineage(LINEAGE, 10)
-                with socket.socketpair() as pair:
+                with unix_pair() as pair:
                     with patch("isc.receiver.read_linux_peer_process",
                                return_value=PeerProcessEvidence(ROOT, os.getuid())):
                         self.assertTrue(monitor.observe_native_peer_lifecycle(
