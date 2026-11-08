@@ -33,6 +33,7 @@
 - [x] Pure bounded opt-in task↔process identity bindings with sticky UNKNOWN after missing scans, PID reuse, or vanished child (no authority or service wiring yet)
 - [x] Refuse ambiguous duplicate process-to-task claims and retain UNKNOWN after process observation gaps (pure model only)
 - [x] Read-only cgroup v2 membership probe binds a previously observed same-user process identity to an expected service cgroup; UNKNOWN on races (not trusted owner authentication)
+- [x] Pure correlation of service invocation identity and cgroup membership observations; rejects changed activation, missing IDs or ambiguous service metadata (no authorization or runtime wiring)
 - [ ] Authenticated process-supervision/child-work accounting and trustworthy lifecycle state
 - [x] Read-only logind inhibitor inventory
 - [x] Read-only current GNOME session IsInhibited(4/8) flags (not complete multi-session coverage)
