@@ -55,6 +55,12 @@ class NativeWorkSupervisor:
         self._checker = membership_checker or self._check_membership
         self._bindings = TaskProcessBindings()
         self._scopes: dict[tuple[str, str], tuple[str, str]] = {}
+        # Only native enrollments have an independently verified activation pin.
+        # These private records are never published or persisted.
+        self._native_pins: dict[
+            tuple[str, str],
+            tuple[NativeServiceProcess, Callable[..., NativeServiceProcess | None]],
+        ] = {}
         self._sticky_unknown: set[tuple[str, str]] = set()
         self._last_time: float | None = None
         self._observed_members = 0
@@ -92,18 +98,61 @@ class NativeWorkSupervisor:
             return False
         try:
             evidence = discovery(service, scope=scope)
-            if (not isinstance(evidence, NativeServiceProcess)
-                    or evidence.coverage_verified
-                    or evidence.task_owner_authenticated
+            if (not self._valid_native_evidence(evidence)
                     or evidence.service != service or evidence.scope != scope):
                 return False
             self.register(
                 owner_token, task_token, evidence.identity,
                 service=service, scope=scope,
             )
+            self._native_pins[(owner_token, task_token)] = (evidence, discovery)
             return True
         except (OSError, TypeError, ValueError, RuntimeError):
             return False
+
+    @staticmethod
+    def _valid_native_evidence(evidence: object) -> bool:
+        """Validate native evidence shape, not owner or task authority."""
+        from .service_process_correlation import _ID
+        from .timer_service_tasks import _valid_cgroup
+        if not isinstance(evidence, NativeServiceProcess):
+            return False
+        identity = evidence.identity
+        return (
+            evidence.coverage_verified is False
+            and evidence.task_owner_authenticated is False
+            and isinstance(evidence.service, str)
+            and _SERVICE.fullmatch(evidence.service) is not None
+            and evidence.scope in ("--user", "--system")
+            and isinstance(evidence.invocation, str)
+            and _ID.fullmatch(evidence.invocation) is not None
+            and isinstance(evidence.cgroup, str)
+            and evidence.cgroup.startswith("/")
+            and evidence.cgroup != "/"
+            and _valid_cgroup(evidence.cgroup)
+            and "//" not in evidence.cgroup
+            and "/../" not in evidence.cgroup
+            and not evidence.cgroup.endswith("/..")
+            and isinstance(identity, ProcessIdentity)
+            and type(identity.pid) is int and identity.pid > 0
+            and type(identity.start_ticks) is int and identity.start_ticks > 0
+            and isinstance(identity.name, str)
+            and 0 < len(identity.name) <= 15
+        )
+
+    @staticmethod
+    def _same_native_activation(
+        earlier: NativeServiceProcess, current: NativeServiceProcess,
+    ) -> bool:
+        """Service restart or process replacement is sticky UNKNOWN."""
+        return (
+            NativeWorkSupervisor._valid_native_evidence(current)
+            and earlier.service == current.service
+            and earlier.scope == current.scope
+            and earlier.invocation.lower() == current.invocation.lower()
+            and earlier.cgroup == current.cgroup
+            and earlier.identity == current.identity
+        )
 
     def observe(self, *, now: float) -> SupervisionSummary:
         """Acquire a fresh scan and evaluate registered workloads."""
@@ -141,6 +190,16 @@ class NativeWorkSupervisor:
                 self._sticky_unknown.add(key)
                 continue
             service, scope = self._scopes[key]
+            if key in self._native_pins:
+                pin, discovery = self._native_pins[key]
+                try:
+                    live = discovery(service, scope=scope)
+                except Exception:
+                    live = None
+                if (not isinstance(live, NativeServiceProcess)
+                        or not self._same_native_activation(pin, live)):
+                    self._sticky_unknown.add(key)
+                    continue
             identities = [by_pid.get(task.root_pid)]
             identities.extend(
                 by_pid.get(pid) for pid, _, _, _ in task.child_identities
