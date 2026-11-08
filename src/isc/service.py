@@ -15,6 +15,7 @@ import time
 from .receiver import LocalMonitor
 from .background_observer import BackgroundProcessObserver
 from .background_scheduler import BackgroundSchedulerObserver
+from .background_independent_services import BackgroundIndependentServiceObserver
 from .settings import ModeConfigError, read_mode
 
 
@@ -61,6 +62,7 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
         with LocalMonitor(advertise=True) as receiver:
             observer: BackgroundProcessObserver | None = None
             scheduler: BackgroundSchedulerObserver | None = None
+            independent: BackgroundIndependentServiceObserver | None = None
             if max_seconds == 0:
                 candidate = BackgroundProcessObserver(
                     receiver.update_process_pulse,
@@ -83,6 +85,16 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
                     pass
                 else:
                     scheduler = candidate_scheduler
+                candidate_independent = BackgroundIndependentServiceObserver(
+                    receiver.update_independent_pulse,
+                )
+                try:
+                    candidate_independent.start()
+                except (OSError, RuntimeError):
+                    # Independent service census is optional and never authority.
+                    pass
+                else:
+                    independent = candidate_independent
             try:
                 return _serve_receiver(
                     receiver, deadline=deadline, poll_seconds=poll_seconds,
@@ -93,6 +105,8 @@ def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: b
                     observer.close()
                 if scheduler is not None:
                     scheduler.close()
+                if independent is not None:
+                    independent.close()
     except (OSError, PermissionError, ValueError) as exc:
         # No socket ownership, arguments or config paths in the error.
         raise MonitorUnavailable("receiver_unavailable") from None
