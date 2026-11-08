@@ -648,6 +648,25 @@ class LocalMonitor:
                 owner_token, task_token, event, peer, now=now,
             )
 
+    def observe_ordered_native_peer_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        connection: socket.socket, *, sequence: int, now: float,
+    ) -> bool:
+        """Controlled in-process adapter; not wired to any public receiver.
+
+        The kernel-reported peer is checked before the supervisor accepts
+        one contiguous per-task event. No external enrollment, command-line
+        API, service control, or suspend capability is added.
+        """
+        peer = read_linux_peer_process(connection)
+        if peer is None:
+            return False
+        with self._process_lock:
+            return self._native_supervisor.observe_ordered_peer_lifecycle(
+                owner_token, task_token, event, peer,
+                sequence=sequence, now=now,
+            )
+
     def native_lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
         """Non-authoritative private aggregate, never sleep eligibility."""
         with self._process_lock:
