@@ -9,17 +9,22 @@ permissions:
 
 jobs:
   unit-tests:
-    # Stable image with Python 3.10 support; avoid runner image churn.
-    runs-on: ubuntu-24.04
+    # Use distro-provided Python; avoid network-dependent interpreter downloads.
+    # Ubuntu 22.04 ships Python 3.10; Ubuntu 24.04 ships Python 3.12.
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        python-version: ["3.10", "3.12"]
+        include:
+          - runner: ubuntu-22.04
+            python-version: "3.10"
+          - runner: ubuntu-24.04
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+      - name: Verify native Python version
+        run: |
+          /usr/bin/python3 -c "import sys; assert sys.version_info[:2] == tuple(map(int, '${{ matrix.python-version }}'.split('.')))"
       - name: Pure policy and read-only CLI tests
-        run: python -m unittest discover -s tests -v
+        run: /usr/bin/python3 -m unittest discover -s tests -v
       - name: CLI smoke test (read-only, no suspend)
-        run: PYTHONPATH=src python -m isc status
+        run: PYTHONPATH=src /usr/bin/python3 -m isc status
