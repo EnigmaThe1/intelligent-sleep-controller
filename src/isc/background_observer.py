@@ -38,9 +38,11 @@ class BackgroundProcessObserver:
         *,
         interval_seconds: float = DEFAULT_INTERVAL_SECONDS,
         scanner: Callable[[], ProcessLineage | None] = read_process_lineage,
+        on_snapshot: Callable[[ProcessLineage | None, float], None] | None = None,
     ) -> None:
         if (
             not callable(publish) or not callable(scanner)
+            or (on_snapshot is not None and not callable(on_snapshot))
             or not isinstance(interval_seconds, (int, float))
             or not math.isfinite(interval_seconds)
             or not 1 <= interval_seconds <= 300
@@ -48,6 +50,7 @@ class BackgroundProcessObserver:
             raise ValueError("invalid_process_observer")
         self._publish = publish
         self._scanner = scanner
+        self._on_snapshot = on_snapshot
         self._interval = float(interval_seconds)
         self._stop = Event()
         self._thread: Thread | None = None
@@ -87,6 +90,13 @@ class BackgroundProcessObserver:
                 # explicitly unknown and cannot make sleep eligible.
                 current = None
             now = time.monotonic()
+            if self._on_snapshot is not None:
+                try:
+                    self._on_snapshot(current, now)
+                except Exception:
+                    # Invalid/incomplete supervised evidence never blocks
+                    # independent aggregate census or the hook receiver.
+                    pass
             if current is None:
                 previous = None
                 pulse = ProcessPulse(
