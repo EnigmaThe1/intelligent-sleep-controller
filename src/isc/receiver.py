@@ -526,6 +526,21 @@ class LocalMonitor:
                 owner_token, task_token, root, service=service, scope=scope,
             )
 
+    def enroll_systemd_service(
+        self, owner_token: str, task_token: str, *,
+        service: str, scope: str,
+    ) -> bool:
+        """Opt-in native systemd enrollment; never accepts a supplied PID.
+
+        This is an in-process API only. Systemd MainPID, invocation and
+        cgroup must be independently checked by the native observer. Even
+        successful enrollment is not application-task authentication.
+        """
+        with self._process_lock:
+            return self._native_supervisor.register_native_service(
+                owner_token, task_token, service=service, scope=scope,
+            )
+
     def update_native_lineage(
         self, snapshot: ProcessLineage | None, observed_at: float,
     ) -> SupervisionSummary:
