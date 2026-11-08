@@ -29,6 +29,7 @@
 - [x] Read-only current-user Linux /proc candidate inventory
 - [x] Read-only process identity/descendant snapshots with PID-reuse protection and conservative lifecycle comparison
 - [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
+- [x] Same-user read-only /proc CPU-tick progress tracking for selected process identities with PID-reuse protection; MONITOR aggregates indicate execution only, never authenticated task ownership, completion, or safe idleness
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
