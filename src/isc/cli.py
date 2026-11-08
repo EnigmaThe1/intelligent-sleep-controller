@@ -142,6 +142,19 @@ def status() -> int:
                 f"identity-changes={health.process_identity_changes}; "
                 f"sample age={health.process_sample_age_seconds}s"
             )
+            if health.process_cpu_progressing is None:
+                print("Observed process CPU progress: UNKNOWN (insufficient samples)")
+            else:
+                print(
+                    "Observed process CPU progress (partial): "
+                    f"progressing={health.process_cpu_progressing}, "
+                    f"unchanged={health.process_cpu_unchanged}, "
+                    f"changed/missing={health.process_cpu_changed_or_missing}"
+                )
+            print(
+                "CPU inactivity does NOT prove job completion, waiting "
+                "safety or sleep eligibility."
+            )
             print("Background census is not proof of job completion or sleep safety.")
         if health.scheduler_sample_age_seconds is None:
             print("Background scheduler census: UNKNOWN (no completed sample)")
