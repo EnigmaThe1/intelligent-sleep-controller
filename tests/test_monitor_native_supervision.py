@@ -128,6 +128,41 @@ class MonitorNativeSupervisionTests(unittest.TestCase):
                     )
                 self.assertEqual(monitor.native_supervision_summary().registered, 0)
 
+    def test_systemd_enrollment_uses_internal_native_verification(self):
+        with TemporaryDirectory() as temp:
+            with LocalMonitor(runtime_dir=temp) as monitor:
+                with patch.object(
+                    monitor._native_supervisor, "register_native_service",
+                    return_value=True,
+                ) as enrollment:
+                    self.assertTrue(monitor.enroll_systemd_service(
+                        OWNER, TASK, service="agent.service", scope="--user",
+                    ))
+                    enrollment.assert_called_once_with(
+                        OWNER, TASK, service="agent.service", scope="--user",
+                    )
+                # No socket events or unverified process data are accepted.
+                self.assertEqual((monitor.accepted, monitor.rejected), (0, 0))
+                self.assertFalse(monitor.native_supervision_summary().coverage_verified)
+
+    def test_failed_systemd_enrollment_does_not_create_binding(self):
+        with TemporaryDirectory() as temp:
+            with LocalMonitor(runtime_dir=temp) as monitor:
+                with patch(
+                    "isc.native_work_supervisor.discover_native_service_process",
+                    return_value=None,
+                ):
+                    # Discovery is the method's captured default, so patch
+                    # the supervisor's native registration at the boundary.
+                    with patch.object(
+                        monitor._native_supervisor, "register_native_service",
+                        return_value=False,
+                    ):
+                        self.assertFalse(monitor.enroll_systemd_service(
+                            OWNER, TASK, service="agent.service", scope="--user",
+                        ))
+                self.assertEqual(monitor.native_supervision_summary().registered, 0)
+
     def test_callback_never_confers_sleep_authority(self):
         with TemporaryDirectory() as temp:
             with LocalMonitor(runtime_dir=temp) as monitor:
