@@ -17,7 +17,7 @@ from .timer_service_lifecycle import ServiceTaskSnapshot
 from .timer_service_tasks import _valid_cgroup
 
 _ID = re.compile(r"[0-9a-fA-F]{32}\Z", re.ASCII)
-_SERVICE = re.compile(r"[A-Za-z0-9_.:@\\-]{1,255}\\.service\\Z", re.ASCII)
+_SERVICE = re.compile(r"[A-Za-z0-9_.:@-]{1,255}\.service\Z", re.ASCII)
 
 
 class ServiceProcessEvidence(Enum):
