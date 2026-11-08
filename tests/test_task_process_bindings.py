@@ -106,6 +106,50 @@ class TaskProcessBindingsTests(unittest.TestCase):
         # even while the root remains visible.
         self.assertFalse(after.coverage_verified)
 
+    def test_child_replacement_same_count_remains_unknown(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        first = proc(pid=101, start=13, parent=100, name="python3")
+        replacement = proc(pid=102, start=14, parent=100, name="python3")
+        reg.observe(lineage(proc(), (first,)), now=1)
+        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
+        after = reg.observe(lineage(proc(), (replacement,)), now=2)
+        self.assertEqual(after.child_observed, 1)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+        self.assertGreaterEqual(after.unknown, 1)
+        # Returning to the previous child snapshot cannot undo missing history.
+        reg.observe(lineage(proc(), (first,)), now=3)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+
+    def test_child_pid_reuse_with_same_child_count_is_unknown(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        child = proc(pid=101, start=13, parent=100, name="python3")
+        recycled = proc(pid=101, start=14, parent=100, name="python3")
+        reg.observe(lineage(proc(), (child,)), now=1)
+        reg.observe(lineage(proc(), (recycled,)), now=2)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+
+    def test_one_child_disappears_while_another_remains(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        first = proc(pid=101, start=13, parent=100, name="python3")
+        second = proc(pid=102, start=14, parent=100, name="bash")
+        reg.observe(lineage(proc(), (first, second)), now=1)
+        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
+        reg.observe(lineage(proc(), (second,)), now=2)
+        self.assertEqual(reg.states(), (WorkState.UNKNOWN,))
+
+    def test_stable_child_identity_does_not_introduce_false_gap(self):
+        reg = TaskProcessBindings()
+        reg.register(OWNER, TASK, proc())
+        child = proc(pid=101, start=13, parent=100, name="python3")
+        reg.observe(lineage(proc(), (child,)), now=1)
+        reg.observe(lineage(proc(), (child,)), now=2)
+        self.assertFalse(reg.history_lost)
+        self.assertEqual(reg.states(), (WorkState.ACTIVE,))
+        self.assertNotIn("101", repr(reg.summary()))
+
     def test_invalid_registration_refused_no_overwriting(self):
         reg = TaskProcessBindings()
         for owner, task, root in (
