@@ -27,6 +27,7 @@ from .events import _HOOK_EVENTS, hook_observation, interpret
 from .background_observer import ProcessPulse
 from .native_work_supervisor import NativeWorkSupervisor, SupervisionSummary
 from .native_task_lifecycle import TaskLifecyclePulse
+from .linux_peer_process import read_linux_peer_process
 from .events import LifecycleEvent
 from .process_lifecycle import ProcessIdentity, ProcessLineage
 from .background_scheduler import SchedulerPulse
@@ -627,6 +628,24 @@ class LocalMonitor:
         with self._process_lock:
             return self._native_supervisor.observe_lifecycle(
                 owner_token, task_token, event, now=now,
+            )
+
+    def observe_native_peer_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        connection: socket.socket, *, now: float,
+    ) -> bool:
+        """Optional trusted in-process adapter with kernel peer credentials.
+
+        Never called by the existing hook transport. An application cannot
+        claim arbitrary PIDs through a JSON field or enroll itself through
+        this method; enrollment remains a separate internal operation.
+        """
+        peer = read_linux_peer_process(connection)
+        if peer is None:
+            return False
+        with self._process_lock:
+            return self._native_supervisor.observe_peer_lifecycle(
+                owner_token, task_token, event, peer, now=now,
             )
 
     def native_lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
