@@ -36,6 +36,7 @@
 - [x] Opt-in read-only NativeWorkSupervisor composes root/child lineage with service invocation/cgroup membership checks; partial evidence only, not running-service or authenticated-owner integration
 - [x] Route MONITOR's existing process snapshots into a dormant, in-process opt-in native supervisor; no unauthenticated socket enrollment, no automatic task discovery, no suspend authority
 - [x] Opt-in systemd MainPID verification: bracket service activation/cgroup identity and same-user stable process identity before in-process enrollment; no task-owner authentication or automatic discovery
+- [x] Revalidate native enrollment against its original systemd invocation, process identity and cgroup on each opt-in observation; changed/missing evidence becomes sticky UNKNOWN (not application-level authentication)
 - [x] Expose internal MONITOR systemd-verified enrollment method; no socket enrollment API, auto-discovery, power control or trusted owner claim
 - [x] Read-only cgroup v2 membership probe binds a previously observed same-user process identity to an expected service cgroup; UNKNOWN on races (not trusted owner authentication)
 - [x] Pure correlation of service invocation identity and cgroup membership observations; rejects changed activation, missing IDs or ambiguous service metadata (no authorization or runtime wiring)
