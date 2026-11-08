@@ -25,6 +25,8 @@ import time
 
 from .events import _HOOK_EVENTS, hook_observation, interpret
 from .background_observer import ProcessPulse
+from .native_work_supervisor import NativeWorkSupervisor, SupervisionSummary
+from .process_lifecycle import ProcessIdentity, ProcessLineage
 from .background_scheduler import SchedulerPulse
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
@@ -400,6 +402,8 @@ class LocalMonitor:
             self._process_lock = Lock()
             self._process_pulse: ProcessPulse | None = None
             self._scheduler_pulse: SchedulerPulse | None = None
+            # Opt-in in-process supervisor only: NO socket enrollment route.
+            self._native_supervisor = NativeWorkSupervisor()
             self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self._listener.bind(str(self.path))
             self.path.chmod(0o600)
@@ -507,6 +511,36 @@ class LocalMonitor:
                 self._last_event_at = time.monotonic()
             except (OSError, ValueError, socket.timeout):
                 self.rejected += 1
+
+    def enroll_native_work(
+        self, owner_token: str, task_token: str, root: ProcessIdentity,
+        *, service: str, scope: str,
+    ) -> None:
+        """Explicit in-process enrollment. Never treat this as authentication.
+
+        There is intentionally NO incoming socket message to register a task.
+        Caller must independently establish owner authority before enrolling.
+        """
+        with self._process_lock:
+            self._native_supervisor.register(
+                owner_token, task_token, root, service=service, scope=scope,
+            )
+
+    def update_native_lineage(
+        self, snapshot: ProcessLineage | None, observed_at: float,
+    ) -> SupervisionSummary:
+        """Reuse background procfs census for already enrolled jobs, if any."""
+        with self._process_lock:
+            if self._native_supervisor.summary().registered == 0:
+                return self._native_supervisor.summary()
+            return self._native_supervisor.observe_snapshot(
+                snapshot, now=observed_at,
+            )
+
+    def native_supervision_summary(self) -> SupervisionSummary:
+        """Private aggregates. Not part of sleep-authorisation or socket API."""
+        with self._process_lock:
+            return self._native_supervisor.summary()
 
     def update_process_pulse(self, pulse: ProcessPulse) -> None:
         """Publish aggregate background evidence, never raw PIDs or names."""
