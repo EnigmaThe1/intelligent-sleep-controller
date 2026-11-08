@@ -184,6 +184,9 @@ class MonitorHealth:
     process_visibility_races: int | None = None
     process_identity_changes: int | None = None
     process_sample_age_seconds: int | None = None
+    process_cpu_progressing: int | None = None
+    process_cpu_unchanged: int | None = None
+    process_cpu_changed_or_missing: int | None = None
     scheduler_services: int | None = None
     scheduler_with_tasks: int | None = None
     scheduler_uncertain: int | None = None
@@ -241,6 +244,10 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             "independent_timer_linked_active", "independent_net_count_delta",
             "independent_sample_age_seconds",
         }
+        cpu_extension = {
+            "process_cpu_progressing", "process_cpu_unchanged",
+            "process_cpu_changed_or_missing",
+        }
         full_scheduler = (
             allowed | extension | process_extension | scheduler_extension
             | {"scheduler_uncertain_transitions", "scheduler_invocation_changes"}
@@ -251,6 +258,7 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             allowed | extension | process_extension | scheduler_extension
             | {"scheduler_uncertain_transitions"},
             full_scheduler, full_scheduler | independent_extension,
+            full_scheduler | independent_extension | cpu_extension,
         )
         if not isinstance(obj, dict) or set(obj) not in versions:
             return None
@@ -323,6 +331,20 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
                 return None
             if (observed[0] is None
                     and obj["independent_net_count_delta"] is not None):
+                return None
+        if cpu_extension <= obj.keys():
+            cpu_values = tuple(obj[key] for key in cpu_extension)
+            if any(value is not None and (
+                type(value) is not int or not 0 <= value <= 2**31
+            ) for value in cpu_values):
+                return None
+            if len({value is None for value in cpu_values}) != 1:
+                return None
+            if (obj["process_sample_age_seconds"] is None
+                    and any(value is not None for value in cpu_values)):
+                return None
+            if (obj["process_roots"] is None
+                    and any(value is not None for value in cpu_values)):
                 return None
         # Reject inconsistent counts instead of claiming spurious delivery.
         if extension <= obj.keys():
@@ -679,6 +701,11 @@ class LocalMonitor:
                 pulse.identity_changes if fresh else None
             ),
             "process_sample_age_seconds": age,
+            "process_cpu_progressing": pulse.cpu_progressing if fresh else None,
+            "process_cpu_unchanged": pulse.cpu_unchanged if fresh else None,
+            "process_cpu_changed_or_missing": (
+                pulse.cpu_changed_or_missing if fresh else None
+            ),
             "scheduler_services": scheduler.services if scheduler_fresh else None,
             "scheduler_with_tasks": scheduler.with_tasks if scheduler_fresh else None,
             "scheduler_uncertain": scheduler.uncertain if scheduler_fresh else None,
