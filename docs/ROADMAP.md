@@ -33,6 +33,7 @@
 - [x] Pure bounded opt-in task↔process identity bindings with sticky UNKNOWN after missing scans, PID reuse, or vanished child (no authority or service wiring yet)
 - [x] Refuse ambiguous duplicate process-to-task claims and retain UNKNOWN after process observation gaps (pure model only)
 - [x] Preserve UNKNOWN when a previously observed descendant vanishes or changes identity, even if other children keep counts unchanged (pure model only)
+- [x] Opt-in read-only NativeWorkSupervisor composes root/child lineage with service invocation/cgroup membership checks; partial evidence only, not running-service or authenticated-owner integration
 - [x] Read-only cgroup v2 membership probe binds a previously observed same-user process identity to an expected service cgroup; UNKNOWN on races (not trusted owner authentication)
 - [x] Pure correlation of service invocation identity and cgroup membership observations; rejects changed activation, missing IDs or ambiguous service metadata (no authorization or runtime wiring)
 - [x] Double-sample procfs cgroup membership around stable process identity checks; migration or missing evidence remains UNKNOWN
