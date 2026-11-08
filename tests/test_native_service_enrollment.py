@@ -12,6 +12,7 @@ from isc.native_service_enrollment import (
 )
 from isc.process_lifecycle import ProcessIdentity
 from isc.native_work_supervisor import NativeWorkSupervisor
+from isc.cgroup_subtree import CgroupSubtreeSummary
 from isc.native_service_enrollment import NativeServiceProcess
 from isc.process_lifecycle import ProcessLineage
 from isc.service_process_correlation import ServiceProcessEvidence
@@ -162,6 +163,7 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
         supervisor = NativeWorkSupervisor(
             lineage_scanner=scanner,
             membership_checker=lambda *args: ServiceProcessEvidence.OBSERVED_MEMBER,
+            subtree_checker=lambda group: CgroupSubtreeSummary(1, unknown=False),
         )
         self.assertTrue(supervisor.register_native_service(
             "a" * 32, "b" * 32, service=SERVICE, scope="--user",
@@ -183,6 +185,7 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
         supervisor = NativeWorkSupervisor(
             lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
             membership_checker=lambda *args: ServiceProcessEvidence.OBSERVED_MEMBER,
+            subtree_checker=lambda group: CgroupSubtreeSummary(1, unknown=False),
         )
         self.assertTrue(supervisor.register_native_service(
             "a" * 32, "b" * 32, service=SERVICE, scope="--user",
@@ -202,6 +205,7 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
         supervisor = NativeWorkSupervisor(
             lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
             membership_checker=lambda *args: ServiceProcessEvidence.OBSERVED_MEMBER,
+            subtree_checker=lambda group: CgroupSubtreeSummary(1, unknown=False),
         )
         self.assertTrue(supervisor.register_native_service(
             "a" * 32, "b" * 32, service=SERVICE, scope="--user",
@@ -229,6 +233,7 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
                 supervisor = NativeWorkSupervisor(
                     lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
                     membership_checker=lambda *args: ServiceProcessEvidence.OBSERVED_MEMBER,
+                    subtree_checker=lambda group: CgroupSubtreeSummary(1, unknown=False),
                 )
                 self.assertTrue(supervisor.register_native_service(
                     "a" * 32, "b" * 32, service=SERVICE, scope="--user",
@@ -251,6 +256,69 @@ class NativeServiceEnrollmentTests(unittest.TestCase):
                     discovery=lambda *a, **kw: evidence,
                 ))
                 self.assertEqual(supervisor.summary().registered, 0)
+
+    def test_detached_cgroup_process_requires_unknown(self):
+        pinned = NativeServiceProcess(
+            IDENTITY, SERVICE, "--user", INV_A, CGROUP,
+        )
+        cases = (
+            CgroupSubtreeSummary(2, unknown=False),
+            CgroupSubtreeSummary(None),
+            CgroupSubtreeSummary(0, unknown=False),
+            CgroupSubtreeSummary(1, unknown=True),
+            CgroupSubtreeSummary(1, unknown=False, coverage_verified=True),
+        )
+        for subtree in cases:
+            with self.subTest(subtree=subtree):
+                supervisor = NativeWorkSupervisor(
+                    lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
+                    membership_checker=lambda *a: ServiceProcessEvidence.OBSERVED_MEMBER,
+                    subtree_checker=lambda group: subtree,
+                )
+                self.assertTrue(supervisor.register_native_service(
+                    "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+                    discovery=lambda *a, **kw: pinned,
+                ))
+                result = supervisor.observe(now=1)
+                self.assertEqual((result.observed_members, result.unknown), (0, 1))
+                self.assertFalse(result.coverage_verified)
+
+    def test_native_cgroup_subtree_failure_remains_sticky(self):
+        pinned = NativeServiceProcess(IDENTITY, SERVICE, "--user", INV_A, CGROUP)
+        samples = iter((
+            CgroupSubtreeSummary(2, unknown=False),
+            CgroupSubtreeSummary(1, unknown=False),
+        ))
+        supervisor = NativeWorkSupervisor(
+            lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
+            membership_checker=lambda *a: ServiceProcessEvidence.OBSERVED_MEMBER,
+            subtree_checker=lambda group: next(samples),
+        )
+        self.assertTrue(supervisor.register_native_service(
+            "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+            discovery=lambda *a, **kw: pinned,
+        ))
+        self.assertEqual(supervisor.observe(now=1).unknown, 1)
+        self.assertEqual(supervisor.observe(now=2).unknown, 1)
+
+    def test_native_subtree_checks_exact_pinned_cgroup(self):
+        pinned = NativeServiceProcess(IDENTITY, SERVICE, "--user", INV_A, CGROUP)
+        checked = []
+        def probe(group):
+            checked.append(group)
+            return CgroupSubtreeSummary(1, unknown=False)
+        supervisor = NativeWorkSupervisor(
+            lineage_scanner=lambda: ProcessLineage((IDENTITY,), (), 0),
+            membership_checker=lambda *a: ServiceProcessEvidence.OBSERVED_MEMBER,
+            subtree_checker=probe,
+        )
+        self.assertTrue(supervisor.register_native_service(
+            "a" * 32, "b" * 32, service=SERVICE, scope="--user",
+            discovery=lambda *a, **kw: pinned,
+        ))
+        self.assertEqual(supervisor.observe(now=1).observed_members, 1)
+        self.assertEqual(checked, [CGROUP])
+        self.assertFalse(supervisor.summary().task_owner_authenticated)
 
     def test_command_is_single_unit_read_only(self):
         self.assertEqual(_service_query(SERVICE, "--user"), (
