@@ -12,6 +12,7 @@ read-only native observers supplied to this class.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 import math
 from typing import Callable
 
@@ -283,7 +284,7 @@ class NativeWorkSupervisor:
             not isinstance(peer, PeerProcessEvidence)
             or peer.authenticated_task_owner is not False
             or peer.coverage_verified is not False
-            or type(peer.uid) is not int or peer.uid < 0
+            or type(peer.uid) is not int or peer.uid != os.getuid()
             or key not in self._native_pins
             or key not in self._observed_keys
             or key in self._sticky_unknown
