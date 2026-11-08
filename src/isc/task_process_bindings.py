@@ -18,6 +18,7 @@ from .process_lifecycle import ProcessIdentity, ProcessLineage
 _TOKEN = re.compile(r"[0-9a-f]{32}\Z", re.ASCII)
 _MAX_TASKS = 256
 _MAX_OBSERVATION_GAP_SECONDS = 90.0
+_MAX_CHILD_IDENTITIES = 4096
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,8 @@ class BoundTask:
     root_start_ticks: int
     root_name: str
     child_identity_seen: bool = False
+    # Private, ephemeral snapshot; never included in aggregate output.
+    child_identities: tuple[tuple[int, int, str, int], ...] = ()
     uncertain: bool = False  # Visible identity is activity evidence, not owner authentication.
     last_observed: float | None = None
 
@@ -136,6 +139,7 @@ class TaskProcessBindings:
                     task.owner_token, task.task_token, task.root_pid,
                     task.root_start_ticks, task.root_name,
                     child_identity_seen=task.child_identity_seen,
+                    child_identities=task.child_identities,
                     uncertain=True, last_observed=float(now),
                 )
                 continue
@@ -154,18 +158,28 @@ class TaskProcessBindings:
                     parent = by_pid[parent].parent_pid
                 return False
 
-            has_child = any(
-                node.pid != task.root_pid and belongs_to_root(node)
+            observed_children = tuple(sorted(
+                (node.pid, node.start_ticks, node.name, node.parent_pid)
                 for node in snapshot.descendants
-            )
+                if node.pid != task.root_pid and belongs_to_root(node)
+            ))
+            if len(observed_children) > _MAX_CHILD_IDENTITIES:
+                self._history_lost = True
+                observed_children = ()
+            has_child = bool(observed_children)
+            # A constant child count can hide one child exiting while another
+            # starts, or a reused PID. Compare identities, not just counts.
+            missing_child = bool(set(task.child_identities) - set(observed_children))
             children += int(has_child)
             self._tasks[key] = BoundTask(
                 task.owner_token, task.task_token, task.root_pid,
                 task.root_start_ticks, task.root_name,
                 child_identity_seen=task.child_identity_seen or has_child,
-                # A previously observed child disappearing cannot be
-                # interpreted as finished; detached children may persist.
+                child_identities=observed_children,
+                # A child leaving the visible lineage cannot establish that
+                # it finished, even if a replacement child remains visible.
                 uncertain=(task.uncertain or self._history_lost
+                           or missing_child
                            or (task.child_identity_seen and not has_child)),
                 last_observed=float(now),
             )
