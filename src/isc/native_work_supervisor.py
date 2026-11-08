@@ -27,6 +27,7 @@ from .task_process_bindings import TaskProcessBindings
 from .events import LifecycleEvent
 from .native_task_lifecycle import NativeLifecycleCorrelator, TaskLifecyclePulse
 from .linux_peer_process import PeerProcessEvidence
+from .controlled_event_sequence import ControlledEventSequence
 
 _MAX_JOBS = 256
 
@@ -74,6 +75,7 @@ class NativeWorkSupervisor:
         self._observed_members = 0
         self._observed_keys: set[tuple[str, str]] = set()
         self._lifecycle = NativeLifecycleCorrelator()
+        self._event_sequence = ControlledEventSequence()
 
     @staticmethod
     def _check_membership(
@@ -315,6 +317,43 @@ class NativeWorkSupervisor:
         return self.observe_lifecycle(
             owner_token, task_token, event, now=now,
         )
+
+    def observe_ordered_peer_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        peer: PeerProcessEvidence | None, *, sequence: int, now: float,
+    ) -> bool:
+        """Controlled in-process adapter; no socket listener or task authority.
+
+        Reject non-native enrollment, unmatched peers, replay, skipped
+        messages and stale observation. An invalid sequence from a matching
+        peer makes that task sticky UNKNOWN. Never restart the sequence on a
+        new service invocation without fresh explicit enrollment.
+        """
+        key = (owner_token, task_token)
+        if (key not in self._native_pins
+                or not isinstance(peer, PeerProcessEvidence)
+                or peer.authenticated_task_owner is not False
+                or peer.coverage_verified is not False
+                or type(peer.uid) is not int
+                or peer.uid != os.getuid()
+                or peer.identity != self._native_pins[key][0].identity):
+            return False
+        if key in self._sticky_unknown or self._event_sequence.invalid(*key):
+            return False
+        if not self._event_sequence.observe(
+            owner_token, task_token, event, sequence=sequence, now=now,
+        ):
+            if self._event_sequence.invalid(*key):
+                self._sticky_unknown.add(key)
+            return False
+        # A failed native activation or membership check must leave the
+        # ordered stream unsafe even if the same counter is later retried.
+        if not self.observe_peer_lifecycle(
+            owner_token, task_token, event, peer, now=now,
+        ):
+            self._sticky_unknown.add(key)
+            return False
+        return True
 
     def lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
         """Only validated native process memberships can reinforce busy claims."""
