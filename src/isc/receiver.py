@@ -26,6 +26,8 @@ import time
 from .events import _HOOK_EVENTS, hook_observation, interpret
 from .background_observer import ProcessPulse
 from .native_work_supervisor import NativeWorkSupervisor, SupervisionSummary
+from .native_task_lifecycle import TaskLifecyclePulse
+from .events import LifecycleEvent
 from .process_lifecycle import ProcessIdentity, ProcessLineage
 from .background_scheduler import SchedulerPulse
 from .background_independent_services import IndependentServicePulse
@@ -616,6 +618,21 @@ class LocalMonitor:
         """Private aggregates. Not part of sleep-authorisation or socket API."""
         with self._process_lock:
             return self._native_supervisor.summary()
+
+    def observe_native_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        *, now: float,
+    ) -> bool:
+        """In-process opt-in only: socket hook claims cannot enroll tasks."""
+        with self._process_lock:
+            return self._native_supervisor.observe_lifecycle(
+                owner_token, task_token, event, now=now,
+            )
+
+    def native_lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
+        """Non-authoritative private aggregate, never sleep eligibility."""
+        with self._process_lock:
+            return self._native_supervisor.lifecycle_summary(now=now)
 
     def update_process_pulse(self, pulse: ProcessPulse) -> None:
         """Publish aggregate background evidence, never raw PIDs or names."""
