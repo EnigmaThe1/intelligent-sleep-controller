@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   unit-tests:
-    runs-on: ubuntu-latest
+    # Stable image with Python 3.10 support; avoid runner image churn.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.10", "3.12"]
