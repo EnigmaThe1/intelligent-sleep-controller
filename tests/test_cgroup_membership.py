@@ -63,8 +63,37 @@ class CgroupMembershipTests(unittest.TestCase):
         ).match)
         with patch("isc.cgroup_membership._read_stat", side_effect=[
             self.identity, ProcessIdentity(123, 101, 1, "codex"),
+            ProcessIdentity(123, 101, 1, "codex"),
         ]):
             self.assertIsNone(self.probe().match)
+
+    def test_cgroup_migration_between_reads_is_unknown(self):
+        with patch("isc.cgroup_membership._read_cgroup", side_effect=[
+            "/user.slice/agent.service",
+            "/user.slice/other.service",
+        ]) as observer:
+            result = self.probe()
+        self.assertIsNone(result.match)
+        self.assertFalse(result.coverage_verified)
+        self.assertEqual(observer.call_count, 2)
+
+    def test_cgroup_disappears_between_reads_is_unknown(self):
+        with patch("isc.cgroup_membership._read_cgroup", side_effect=[
+            "/user.slice/agent.service", None,
+        ]):
+            self.assertIsNone(self.probe().match)
+
+    def test_stable_identity_and_membership_are_required(self):
+        with patch("isc.cgroup_membership._read_stat", side_effect=[
+            self.identity, self.identity, self.identity,
+        ]) as identity:
+            with patch("isc.cgroup_membership._read_cgroup", side_effect=[
+                "/user.slice/agent.service",
+                "/user.slice/agent.service",
+            ]) as membership:
+                self.assertTrue(self.probe().match)
+        self.assertEqual(identity.call_count, 3)
+        self.assertEqual(membership.call_count, 2)
 
     def test_unknown_for_absent_inaccessible_foreign_or_symlink(self):
         self.assertIsNone(self.probe(uid=os.getuid()+1).match)
