@@ -148,19 +148,16 @@ class MonitorNativeSupervisionTests(unittest.TestCase):
     def test_failed_systemd_enrollment_does_not_create_binding(self):
         with TemporaryDirectory() as temp:
             with LocalMonitor(runtime_dir=temp) as monitor:
-                with patch(
-                    "isc.native_work_supervisor.discover_native_service_process",
-                    return_value=None,
-                ):
-                    # Discovery is the method's captured default, so patch
-                    # the supervisor's native registration at the boundary.
-                    with patch.object(
-                        monitor._native_supervisor, "register_native_service",
-                        return_value=False,
-                    ):
-                        self.assertFalse(monitor.enroll_systemd_service(
-                            OWNER, TASK, service="agent.service", scope="--user",
-                        ))
+                # Exercise the actual enrollment boundary with invalid
+                # systemd service metadata. No process ID is accepted.
+                with patch.object(
+                    monitor._native_supervisor, "register_native_service",
+                    return_value=False,
+                ) as native:
+                    self.assertFalse(monitor.enroll_systemd_service(
+                        OWNER, TASK, service="agent.service", scope="--user",
+                    ))
+                    native.assert_called_once()
                 self.assertEqual(monitor.native_supervision_summary().registered, 0)
 
     def test_callback_never_confers_sleep_authority(self):
