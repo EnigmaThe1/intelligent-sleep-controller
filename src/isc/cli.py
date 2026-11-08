@@ -40,6 +40,7 @@ from .native_observers import read_native_activity
 from .session_census import read_session_census
 from .service_invocations import read_service_invocations, compare_service_invocations
 from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_timer_associations
+from .independent_service_discovery import read_independent_services
 from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
 from .timer_service_tasks import read_timer_service_tasks
@@ -1002,6 +1003,27 @@ def timer_files_cli() -> int:
     return 0
 
 
+def independent_services_cli() -> int:
+    """Aggregate active systemd services irrespective of timer associations."""
+    print("ISC INDEPENDENT SERVICE DISCOVERY — READ ONLY")
+    for scope, label in (("--system", "System"), ("--user", "User")):
+        evidence = read_independent_services(scope=scope)
+        if evidence.uncertain:
+            print(f"{label}: UNKNOWN (incomplete native service discovery)")
+        else:
+            print(
+                f"{label}: active services={evidence.active_services}; "
+                f"timer-linked active={evidence.timer_linked_active}; "
+                f"other active={evidence.other_active}"
+            )
+    print("An active service is not proof of a running application task.")
+    print("Non-timer services can host work; inactive units can leave detached work.")
+    print("Cron, containers, transient jobs and remote schedulers remain unverified.")
+    print("Coverage: INCOMPLETE. Automatic suspension remains disabled.")
+    print("No services or system settings changed.")
+    return 0
+
+
 def scheduled_work_cli() -> int:
     """Read-only, partial systemd timer and service state census."""
     data = read_scheduled_work()
@@ -1041,7 +1063,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1075,6 +1097,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return process_watch_cli(seconds=args.seconds)
     if args.command == "scheduled-work":
         return scheduled_work_cli()
+    if args.command == "independent-services":
+        return independent_services_cli()
     if args.command == "timer-files":
         return timer_files_cli()
     if args.command == "timer-associations":
