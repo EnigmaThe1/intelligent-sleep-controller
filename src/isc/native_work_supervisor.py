@@ -76,6 +76,7 @@ class NativeWorkSupervisor:
         self._scopes[(owner_token, task_token)] = (service, scope)
 
     def observe(self, *, now: float) -> SupervisionSummary:
+        """Acquire a fresh scan and evaluate registered workloads."""
         if (type(now) not in (int, float) or not math.isfinite(now) or now < 0):
             raise ValueError("invalid_supervision_time")
         snapshot: ProcessLineage | None
@@ -83,7 +84,19 @@ class NativeWorkSupervisor:
             snapshot = self._scanner()
         except Exception:
             snapshot = None
-        state = self._bindings.observe(snapshot, now=now)
+        return self.observe_snapshot(snapshot, now=now)
+
+    def observe_snapshot(
+        self, snapshot: ProcessLineage | None, *, now: float,
+    ) -> SupervisionSummary:
+        """Reuse the running process census without a second scan.
+
+        Called only by in-process MONITOR code. Caller registration remains
+        explicitly opt-in, never authenticated by an incoming hook payload.
+        """
+        if (type(now) not in (int, float) or not math.isfinite(now) or now < 0):
+            raise ValueError("invalid_supervision_time")
+        self._bindings.observe(snapshot, now=now)
         self._last_time = float(now)
         self._observed_members = 0
         if snapshot is None or self._bindings.history_lost:
