@@ -28,6 +28,7 @@ from .background_observer import ProcessPulse
 from .native_work_supervisor import NativeWorkSupervisor, SupervisionSummary
 from .process_lifecycle import ProcessIdentity, ProcessLineage
 from .background_scheduler import SchedulerPulse
+from .background_independent_services import IndependentServicePulse
 from .hook_payload import HookObservation, SUPPORTED_SOURCES
 from .registry import WorkRegistry
 
@@ -190,6 +191,11 @@ class MonitorHealth:
     scheduler_sample_age_seconds: int | None = None
     scheduler_uncertain_transitions: int | None = None
     scheduler_invocation_changes: int | None = None
+    independent_services: int | None = None
+    independent_other_active: int | None = None
+    independent_timer_linked_active: int | None = None
+    independent_net_count_delta: int | None = None
+    independent_sample_age_seconds: int | None = None
 
 
 def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHealth | None:
@@ -230,13 +236,21 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             "scheduler_uncertain", "scheduler_transitions",
             "scheduler_sample_age_seconds",
         }
+        independent_extension = {
+            "independent_services", "independent_other_active",
+            "independent_timer_linked_active", "independent_net_count_delta",
+            "independent_sample_age_seconds",
+        }
+        full_scheduler = (
+            allowed | extension | process_extension | scheduler_extension
+            | {"scheduler_uncertain_transitions", "scheduler_invocation_changes"}
+        )
         versions = (
             allowed, allowed | extension, allowed | extension | process_extension,
             allowed | extension | process_extension | scheduler_extension,
             allowed | extension | process_extension | scheduler_extension
             | {"scheduler_uncertain_transitions"},
-            allowed | extension | process_extension | scheduler_extension
-            | {"scheduler_uncertain_transitions", "scheduler_invocation_changes"},
+            full_scheduler, full_scheduler | independent_extension,
         )
         if not isinstance(obj, dict) or set(obj) not in versions:
             return None
@@ -286,6 +300,29 @@ def read_monitor_health(*, runtime_dir: str | Path | None = None) -> MonitorHeal
             if (obj["scheduler_services"] is not None and
                 obj["scheduler_with_tasks"] is not None and
                 obj["scheduler_with_tasks"] > obj["scheduler_services"]):
+                return None
+        if independent_extension <= obj.keys():
+            for key in independent_extension:
+                value = obj[key]
+                if value is not None and (
+                    type(value) is not int or not 0 <= value <= 2**31
+                ):
+                    return None
+            observed = (
+                obj["independent_services"],
+                obj["independent_other_active"],
+                obj["independent_timer_linked_active"],
+            )
+            if len({value is None for value in observed}) != 1:
+                return None
+            if (obj["independent_sample_age_seconds"] is None
+                    and any(value is not None for value in observed)):
+                return None
+            if (observed[0] is not None
+                    and observed[1] + observed[2] != observed[0]):
+                return None
+            if (observed[0] is None
+                    and obj["independent_net_count_delta"] is not None):
                 return None
         # Reject inconsistent counts instead of claiming spurious delivery.
         if extension <= obj.keys():
@@ -402,6 +439,7 @@ class LocalMonitor:
             self._process_lock = Lock()
             self._process_pulse: ProcessPulse | None = None
             self._scheduler_pulse: SchedulerPulse | None = None
+            self._independent_pulse: IndependentServicePulse | None = None
             # Opt-in in-process supervisor only: NO socket enrollment route.
             self._native_supervisor = NativeWorkSupervisor()
             self._listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -571,6 +609,14 @@ class LocalMonitor:
         with self._process_lock:
             self._scheduler_pulse = pulse
 
+    def update_independent_pulse(self, pulse: IndependentServicePulse) -> None:
+        """Private aggregate-only observations. No names or process metadata."""
+        if (not isinstance(pulse, IndependentServicePulse)
+                or pulse.coverage_verified):
+            raise ValueError("invalid_independent_pulse")
+        with self._process_lock:
+            self._independent_pulse = pulse
+
     def _reply_health(self, connection: socket.socket) -> None:
         """No session fingerprints, PIDs, commands or prompts leave receiver."""
         now = time.monotonic()
@@ -578,6 +624,7 @@ class LocalMonitor:
         with self._process_lock:
             pulse = self._process_pulse
             scheduler = self._scheduler_pulse
+            independent = self._independent_pulse
         # A stale process census is no evidence of current activity or safety.
         elapsed = max(0.0, now - pulse.observed_at) if pulse is not None else None
         age = min(2**31, math.ceil(elapsed)) if elapsed is not None else None
@@ -594,6 +641,17 @@ class LocalMonitor:
         scheduler_age = (
             min(2**31, math.ceil(scheduler_elapsed))
             if scheduler_elapsed is not None else None
+        )
+        independent_elapsed = (
+            max(0.0, now - independent.observed_at)
+            if independent is not None else None
+        )
+        independent_fresh = (
+            independent_elapsed is not None and independent_elapsed <= 240.0
+        )
+        independent_age = (
+            min(2**31, math.ceil(independent_elapsed))
+            if independent_elapsed is not None else None
         )
         states = Counter(item.state.value for item in items)
         response = {
@@ -632,6 +690,19 @@ class LocalMonitor:
             "scheduler_invocation_changes": (
                 scheduler.invocation_changes if scheduler_fresh else None
             ),
+            "independent_services": (
+                independent.active_services if independent_fresh else None
+            ),
+            "independent_other_active": (
+                independent.other_active if independent_fresh else None
+            ),
+            "independent_timer_linked_active": (
+                independent.timer_linked_active if independent_fresh else None
+            ),
+            "independent_net_count_delta": (
+                independent.net_count_delta if independent_fresh else None
+            ),
+            "independent_sample_age_seconds": independent_age,
         }
         packet = json.dumps(response, separators=(",", ":")).encode("ascii")
         if len(packet) <= MAX_HEALTH_BYTES:
