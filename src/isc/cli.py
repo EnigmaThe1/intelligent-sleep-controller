@@ -162,6 +162,23 @@ def status() -> int:
                 f"sample age={health.scheduler_sample_age_seconds}s"
             )
             print("Scheduler observations do not prove lifecycle completion.")
+        if health.independent_sample_age_seconds is None:
+            print("Background independent services: UNKNOWN (no completed sample)")
+        elif health.independent_services is None:
+            print(
+                "Background independent services: UNKNOWN "
+                f"(sample {health.independent_sample_age_seconds}s ago)"
+            )
+        else:
+            print(
+                "Background independent services (partial): "
+                f"active={health.independent_services}, "
+                f"timer-linked={health.independent_timer_linked_active}, "
+                f"other={health.independent_other_active}, "
+                f"net count deltas={health.independent_net_count_delta}; "
+                f"sample age={health.independent_sample_age_seconds}s"
+            )
+            print("Net service-count changes cannot establish task transitions.")
         print("Coverage verified: NO (observations are not authority)")
     print("No system configuration has been changed.")
     return 0
