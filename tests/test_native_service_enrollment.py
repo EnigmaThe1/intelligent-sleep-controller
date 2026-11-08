@@ -1,0 +1,125 @@
+"""Synthetic systemd-origin process discovery; no real unit activation."""
+from pathlib import Path
+import sys
+import unittest
+from unittest.mock import Mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from isc.cgroup_membership import CgroupMembership
+from isc.native_service_enrollment import (
+    _metadata, _service_query, discover_native_service_process,
+)
+from isc.process_lifecycle import ProcessIdentity
+
+SERVICE = "agent.service"
+PID = 145
+INV_A = "a" * 32
+INV_B = "b" * 32
+CGROUP = "/user.slice/agent.service"
+IDENTITY = ProcessIdentity(PID, 500, 1, "python3")
+
+
+def raw(pid=PID, invocation=INV_A, group=CGROUP, name=SERVICE):
+    return (
+        f"Id={name}\nMainPID={pid}\nInvocationID={invocation}\n"
+        f"ControlGroup={group}\n"
+    )
+
+
+class NativeServiceEnrollmentTests(unittest.TestCase):
+    def discover(self, first=None, second=None, *, identity=IDENTITY,
+                 matched=True, scope="--user"):
+        captures = iter([raw() if first is None else first,
+                         raw() if second is None else second])
+        read = Mock(side_effect=lambda q: next(captures))
+        lookup = Mock(return_value=identity)
+        membership = Mock(return_value=CgroupMembership(matched))
+        result = discover_native_service_process(
+            SERVICE, scope=scope, capture=read,
+            process_lookup=lookup, membership=membership,
+        )
+        return result, read, lookup, membership
+
+    def test_stable_systemd_process_returns_only_non_authoritative_evidence(self):
+        result, read, lookup, membership = self.discover()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.identity, IDENTITY)
+        self.assertEqual(result.invocation, INV_A)
+        self.assertFalse(result.coverage_verified)
+        self.assertFalse(result.task_owner_authenticated)
+        self.assertEqual(read.call_count, 2)
+        lookup.assert_called_once_with(PID)
+        membership.assert_called_once_with(IDENTITY, CGROUP)
+
+    def test_changed_service_invocation_rejected(self):
+        result, _, _, _ = self.discover(second=raw(invocation=INV_B))
+        self.assertIsNone(result)
+
+    def test_changed_cgroup_or_main_pid_rejected(self):
+        for second in (raw(group="/user.slice/other.service"),
+                       raw(pid=146)):
+            with self.subTest(second=second):
+                self.assertIsNone(self.discover(second=second)[0])
+
+    def test_missing_main_pid_or_invocation_rejected_before_lookup(self):
+        for first in (raw(pid=0), raw(pid="bad"), raw(invocation=""),
+                      raw(group=""), raw(group="/"), raw(group="/a/../b"),
+                      raw(name="other.service"), "bad", None):
+            with self.subTest(first=first):
+                capture = Mock(return_value=first)
+                lookup = Mock()
+                result = discover_native_service_process(
+                    SERVICE, scope="--user", capture=capture,
+                    process_lookup=lookup,
+                )
+                self.assertIsNone(result)
+                lookup.assert_not_called()
+
+    def test_pid_reuse_or_missing_process_identity_fails_closed(self):
+        for identity in (None, ProcessIdentity(146, 500, 1, "python3"),
+                         ProcessIdentity(PID, 0, 1, "python3")):
+            with self.subTest(identity=identity):
+                result, read, lookup, membership = self.discover(identity=identity)
+                self.assertIsNone(result)
+                self.assertEqual(read.call_count, 1)
+                membership.assert_not_called()
+
+    def test_unknown_or_outside_membership_fails_closed(self):
+        for matched in (None, False):
+            with self.subTest(matched=matched):
+                result, read, lookup, membership = self.discover(matched=matched)
+                self.assertIsNone(result)
+                self.assertEqual(read.call_count, 1)
+
+    def test_malformed_units_rejected_without_native_io(self):
+        for name, scope in (("bad.timer", "--user"),
+                            ("../bad.service", "--user"),
+                            (SERVICE, "--unknown")):
+            read = Mock()
+            result = discover_native_service_process(
+                name, scope=scope, capture=read,
+            )
+            self.assertIsNone(result)
+            read.assert_not_called()
+
+    def test_scanner_failure_or_conflicting_properties_rejected(self):
+        for broken in (RuntimeError("read failed"), OSError("missing")):
+            with self.subTest(broken=broken):
+                self.assertIsNone(discover_native_service_process(
+                    SERVICE, scope="--user",
+                    capture=Mock(side_effect=broken),
+                ))
+        self.assertIsNone(_metadata(raw() + "MainPID=145\n", SERVICE))
+        self.assertIsNone(_metadata(raw(pid=PID, group="/"), SERVICE))
+
+    def test_command_is_single_unit_read_only(self):
+        self.assertEqual(_service_query(SERVICE, "--user"), (
+            "systemctl", "--user", "--no-pager", "show",
+            "--property=Id,MainPID,InvocationID,ControlGroup",
+            "--", SERVICE,
+        ))
+
+
+if __name__ == "__main__":
+    unittest.main()
