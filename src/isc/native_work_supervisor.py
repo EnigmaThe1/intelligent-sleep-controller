@@ -23,6 +23,8 @@ from .service_process_observer import observe_service_process
 from .native_service_enrollment import discover_native_service_process, NativeServiceProcess
 from .cgroup_subtree import CgroupSubtreeSummary, observe_cgroup_subtree
 from .task_process_bindings import TaskProcessBindings
+from .events import LifecycleEvent
+from .native_task_lifecycle import NativeLifecycleCorrelator, TaskLifecyclePulse
 
 _MAX_JOBS = 256
 
@@ -68,6 +70,8 @@ class NativeWorkSupervisor:
         self._sticky_unknown: set[tuple[str, str]] = set()
         self._last_time: float | None = None
         self._observed_members = 0
+        self._observed_keys: set[tuple[str, str]] = set()
+        self._lifecycle = NativeLifecycleCorrelator()
 
     @staticmethod
     def _check_membership(
@@ -182,6 +186,7 @@ class NativeWorkSupervisor:
         self._bindings.observe(snapshot, now=now)
         self._last_time = float(now)
         self._observed_members = 0
+        self._observed_keys.clear()
         if snapshot is None or self._bindings.history_lost:
             self._sticky_unknown.update(self._scopes)
             return self.summary()
@@ -244,7 +249,32 @@ class NativeWorkSupervisor:
                 self._sticky_unknown.add(key)
                 continue
             self._observed_members += 1
+            self._observed_keys.add(key)
         return self.summary()
+
+    def observe_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        *, now: float,
+    ) -> bool:
+        """Opt-in in-process lifecycle claim for an enrolled task only.
+
+        No socket route. No successful completion/human-idle inference and no
+        ownership authentication, even when a native service is observed.
+        """
+        return self._lifecycle.report(
+            owner_token, task_token, event, now=now,
+            enrolled=(owner_token, task_token) in self._scopes,
+        )
+
+    def lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
+        """Only validated native process memberships can reinforce busy claims."""
+        verified = frozenset(
+            key for key in self._observed_keys
+            if key not in self._sticky_unknown
+        )
+        return self._lifecycle.aggregate(
+            tuple(self._scopes), verified, now=now,
+        )
 
     def summary(self) -> SupervisionSummary:
         states = self._bindings.states()
