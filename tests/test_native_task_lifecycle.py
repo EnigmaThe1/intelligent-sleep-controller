@@ -147,8 +147,31 @@ class NativeLifecycleTests(unittest.TestCase):
                 )
                 monitor.update_native_lineage(LINEAGE, 2)
                 result = monitor.native_lifecycle_summary(now=2)
-                self.assertEqual((result.busy, result.unknown), (1, 0))
+                # Without independently verified service membership the
+                # event cannot make the task look confidently busy or done.
+                self.assertEqual((result.busy, result.unknown), (0, 1))
                 self.assertFalse(result.task_owner_authenticated)
+
+    def test_in_process_receiver_correlates_mock_verified_membership(self):
+        from unittest.mock import patch
+        with patch(
+            "isc.native_work_supervisor.NativeWorkSupervisor._check_membership",
+            return_value=ServiceProcessEvidence.OBSERVED_MEMBER,
+        ):
+            with TemporaryDirectory() as temp:
+                with LocalMonitor(runtime_dir=temp) as monitor:
+                    monitor.enroll_native_work(
+                        OWNER, TASK, ROOT,
+                        service="sample.service", scope="--user",
+                    )
+                    self.assertTrue(monitor.observe_native_lifecycle(
+                        OWNER, TASK, event(EventKind.WAITING_EXTERNAL), now=1,
+                    ))
+                    monitor.update_native_lineage(LINEAGE, 2)
+                    result = monitor.native_lifecycle_summary(now=2)
+                    self.assertEqual((result.busy, result.unknown), (1, 0))
+                    self.assertFalse(result.task_owner_authenticated)
+                    self.assertFalse(result.coverage_verified)
 
     def test_public_summary_contains_no_identifiers(self):
         model = NativeLifecycleCorrelator()
