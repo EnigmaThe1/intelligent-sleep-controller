@@ -30,6 +30,7 @@
 - [x] Read-only process identity/descendant snapshots with PID-reuse protection and conservative lifecycle comparison
 - [x] Independent 30-second MONITOR-only process snapshots with aggregate receiver health, freshness limits and UNKNOWN on errors
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
+- [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Pure bounded opt-in task↔process identity bindings with sticky UNKNOWN after missing scans, PID reuse, or vanished child (no authority or service wiring yet)
 - [x] Refuse ambiguous duplicate process-to-task claims and retain UNKNOWN after process observation gaps (pure model only)
 - [x] Preserve UNKNOWN when a previously observed descendant vanishes or changes identity, even if other children keep counts unchanged (pure model only)
