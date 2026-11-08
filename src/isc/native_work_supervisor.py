@@ -25,6 +25,7 @@ from .cgroup_subtree import CgroupSubtreeSummary, observe_cgroup_subtree
 from .task_process_bindings import TaskProcessBindings
 from .events import LifecycleEvent
 from .native_task_lifecycle import NativeLifecycleCorrelator, TaskLifecyclePulse
+from .linux_peer_process import PeerProcessEvidence
 
 _MAX_JOBS = 256
 
@@ -266,11 +267,64 @@ class NativeWorkSupervisor:
             enrolled=(owner_token, task_token) in self._scopes,
         )
 
+    def observe_peer_lifecycle(
+        self, owner_token: str, task_token: str, event: LifecycleEvent,
+        peer: PeerProcessEvidence | None, *, now: float,
+    ) -> bool:
+        """Future trusted transport: accept only live pinned native peers.
+
+        A peer must match the systemd-origin pinned MainPID and most recent
+        native supervision observation, and the service identity must still
+        be independently verified. In-process callers cannot create enrollment
+        or grant ownership authority. No public socket route is installed.
+        """
+        key = (owner_token, task_token)
+        if (
+            not isinstance(peer, PeerProcessEvidence)
+            or peer.authenticated_task_owner is not False
+            or peer.coverage_verified is not False
+            or type(peer.uid) is not int or peer.uid < 0
+            or key not in self._native_pins
+            or key not in self._observed_keys
+            or key in self._sticky_unknown
+            or type(now) not in (int, float)
+            or not math.isfinite(now)
+            or self._last_time is None
+            or now < self._last_time
+            or now - self._last_time > 60.0
+        ):
+            return False
+        pinned, discovery = self._native_pins[key]
+        if peer.identity != pinned.identity:
+            return False
+        service, scope = self._scopes[key]
+        try:
+            live = discovery(service, scope=scope)
+            if not (
+                isinstance(live, NativeServiceProcess)
+                and self._same_native_activation(pinned, live)
+                and self._checker(service, peer.identity, scope)
+                    is ServiceProcessEvidence.OBSERVED_MEMBER
+            ):
+                self._sticky_unknown.add(key)
+                return False
+        except Exception:
+            self._sticky_unknown.add(key)
+            return False
+        return self.observe_lifecycle(
+            owner_token, task_token, event, now=now,
+        )
+
     def lifecycle_summary(self, *, now: float) -> TaskLifecyclePulse:
         """Only validated native process memberships can reinforce busy claims."""
+        fresh = (
+            self._last_time is not None
+            and now >= self._last_time
+            and now - self._last_time <= 60.0
+        )
         verified = frozenset(
             key for key in self._observed_keys
-            if key not in self._sticky_unknown
+            if fresh and key not in self._sticky_unknown
         )
         return self._lifecycle.aggregate(
             tuple(self._scopes), verified, now=now,
