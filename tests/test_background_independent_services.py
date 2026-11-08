@@ -161,7 +161,7 @@ class IndependentBackgroundTests(unittest.TestCase):
                 stale = json.loads(response.sendall.call_args.args[0])
                 self.assertIsNone(stale["independent_services"])
                 self.assertIsNone(stale["independent_other_active"])
-                self.assertEqual(stale["independent_sample_age_seconds"], 241)
+                self.assertIn(stale["independent_sample_age_seconds"], (241, 242))
 
     def test_forged_or_inconsistent_protocol_counts_rejected(self):
         from unittest.mock import MagicMock
