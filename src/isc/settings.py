@@ -134,9 +134,10 @@ def set_mode(mode: str, *, config_root: str | Path | None = None) -> ModeStatus:
         raise ModeConfigError("unsupported_mode")
     root = _config_root(config_root)
     # Inspect before changing anything. Never replace an unknown setting.
-    present = read_mode(config_root=root)
-    if present.configured and present.mode == mode:
-        return present
+    # Validate the existing configuration but NEVER return before acquiring
+    # the writer lock. A second process may change the mode after this read;
+    # an early "already off" return could silently lose an OFF request.
+    read_mode(config_root=root)
     try:
         root.mkdir(mode=0o700, exist_ok=True)
         _check_directory(root, private=False)
