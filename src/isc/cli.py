@@ -798,6 +798,13 @@ def gnome_policy_cli(operation: str | None, confirmed: bool) -> int:
     else:
         print("Operator-confirmed GNOME power policy request processed.")
     print("ISC automatic ON remains unavailable.")
+    # A known, enabled GNOME idle timeout is an actionable inspection
+    # result, not a CLI failure. Unknown GNOME/backup state is an error.
+    if operation is None:
+        return 2 if (
+            policy.ac_timeout is None or policy.battery_timeout is None
+            or policy.reason in ("backup_unverified", "gnome_policy_unverified")
+        ) else 0
     return 0 if not policy.conflict else 2
 
 
