@@ -42,6 +42,7 @@
 - [x] Step 98: add bounded pure signal-stream model with sticky UNKNOWN on disconnects, clock errors, long gaps, invalid signals and event overflow (no live subscription)
 - [x] Step 99a: on-demand, read-only user systemd D-Bus NameHasOwner probe (not a live signal subscription; no coverage or owner authority)
 - [x] Step 99b: optional bounded one-shot native user-manager signal watch (systemd >=257 required; no payload capture, no live service wiring)
+- [x] Step 99c: bounded opt-in systemd 255 user-bus observation window with output discarded and timeout; transport only, not event delivery verification
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
