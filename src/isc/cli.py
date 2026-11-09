@@ -49,6 +49,7 @@ from .native_observers import read_native_activity
 from .session_census import read_session_census
 from .service_invocations import read_service_invocations, compare_service_invocations
 from .scheduled_work import read_scheduled_work, read_timer_unit_files, read_timer_associations
+from .scheduled_safety import classify_scheduled_work
 from .independent_service_discovery import read_independent_services
 from .timer_service_states import read_timer_service_states
 from .timer_service_processes import read_timer_service_process_indicators
@@ -321,11 +322,13 @@ def check() -> int:
     gnome_flags = read_gnome_inhibit_flags()
     session_census = read_session_census()
     scan = read_process_candidates()
+    scheduled = read_scheduled_work()
+    scheduler = classify_scheduled_work(scheduled)
     # Share the identical conservative source composition with the
     # disarmed auto-suspend executor. Source availability is not authority.
     result = evaluate(compose_host_snapshot(
         idle_ms=idle_ms, inhibitors=locks, gnome_flags=gnome_flags,
-        processes=scan, sessions=session_census,
+        processes=scan, sessions=session_census, scheduled=scheduled,
     ))
     print("ISC READ-ONLY SAFETY CHECK")
     print(f"GNOME idle: {_format_idle_ms(idle_ms)}")
@@ -336,6 +339,16 @@ def check() -> int:
         print(f"Process candidates requiring lifecycle verification: {scan.count}")
     print("Application workload coverage: NOT VERIFIED")
     print("Scheduled work and wake safety: NOT VERIFIED")
+    if not scheduler.inventory_valid:
+        print("Systemd timer/service evidence: UNKNOWN")
+    else:
+        print(
+            "Observed systemd units: "
+            f"{scheduler.running_services} running services, "
+            f"{scheduler.transitioning_services} transitioning, "
+            f"{scheduler.waiting_timers} waiting timers"
+        )
+        print("These are unclassified services/timers, not verified task states.")
     def _flag(value: bool | None) -> str:
         return "UNKNOWN" if value is None else ("YES" if value else "NO")
 
