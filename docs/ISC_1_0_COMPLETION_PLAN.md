@@ -197,6 +197,37 @@ actually changing the host's power settings. Full automatic ownership
 across boot, session exit and uninstall is still a Milestone 1 release gate.
 On a desktop with unstable resume, nothing here enables unattended sleep.
 
+### Milestone 3 — systemd evidence used by the safety decision
+
+The shared `host_safety.compose_host_snapshot` and the operator-visible
+`isc check` now consume the **existing** `read_scheduled_work()`
+systemd timer/service census. A small pure classifier records waiting
+timers (wake safety unknown), running or transitioning user/system services
+(task state unknown) and missing or malformed inventories (source unknown).
+Identifiers are generic; unit names, processes, PIDs, command arguments
+and user identity are not exported.
+
+This is a meaningful integration, not a new monitoring subsystem:
+previously the timer/service census was diagnostic-only and invisible
+to the shared automatic-suspend policy. A successful census still cannot
+verify every cron job, container, detached child or application-native
+scheduler. Zero observed services is **not** proof of absence of work.
+`scheduled_work_safe=False` and `coverage_complete=False` remain
+mandatory until genuinely comprehensive wake/workload authority exists.
+
+Finite current coverage contract:
+
+| Evidence | Safe inference for ISC 1.0 | Still unsupported |
+| --- | --- | --- |
+| `isc protect -- ...` and native inhibitors | A currently held sleep/idle inhibitor blocks sleep | Detached child work after the inhibitor's lifetime |
+| Selected same-user process candidates | Candidate identity is observed; lifecycle UNKNOWN | Any unobserved processes, human versus external wait |
+| systemd timer/service census | Waiting timers and active service states require further protection | Timer-to-task completion, missed units, cron, containers |
+| GNOME idle and session inhibitors | Current-session idle/inhibitor observation | Other sessions and background-work completion |
+| Agent hook events | Claimed observations for MONITOR | Authentication and full lifecycle coverage |
+
+No hardware sleep tests or ON mode activation are authorised by this
+integration.
+
 ### Milestone 3 — practical protected-work command
 
 Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
