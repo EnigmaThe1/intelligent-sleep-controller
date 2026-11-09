@@ -26,5 +26,9 @@ jobs:
           /usr/bin/python3 -c "import sys; assert sys.version_info[:2] == tuple(map(int, '${{ matrix.python-version }}'.split('.')))"
       - name: Pure policy and read-only CLI tests
         run: /usr/bin/python3 -m unittest discover -s tests -v
+      - name: Ubuntu umask 0002 regression (GNOME policy, simulated writes only)
+        run: |
+          umask 0002
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src /usr/bin/python3 -m unittest discover -s tests -p 'test_gnome_policy.py' -v
       - name: CLI smoke test (read-only, no suspend)
         run: PYTHONPATH=src /usr/bin/python3 -m isc status
