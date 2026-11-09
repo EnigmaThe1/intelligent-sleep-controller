@@ -8,6 +8,8 @@ The stored preference does not install or run a daemon.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import contextmanager
+from typing import Iterator
 import fcntl
 import json
 import os
@@ -194,3 +196,54 @@ def set_mode(mode: str, *, config_root: str | Path | None = None) -> ModeStatus:
             os.close(fd)
     except (OSError, UnicodeError) as exc:
         raise ModeConfigError("mode_write_unavailable") from None
+
+
+@contextmanager
+def mode_dispatch_guard(
+    *, config_root: str | Path | None = None,
+) -> Iterator[ModeStatus]:
+    """Serialize the final native request boundary with set_mode.
+
+    Use the *same* private lock file as preference writes. Never create
+    configuration or a lock file from an automatic power path: missing,
+    malformed, busy or unsafe state refuses to authorize the operation.
+    LOCK_NB makes concurrent submit attempts fail closed rather than
+    waiting behind a mode change or another suspend attempt.
+
+    The caller must keep this guard around only the bounded native dispatch,
+    never around slow workload observation or a long-running service.
+    A completed native request cannot be recalled by a later OFF action.
+    """
+    root = _config_root(config_root)
+    _check_directory(root, private=False)
+    directory = root / PROJECT_DIR
+    _check_directory(directory, private=True)
+    lock_path = directory / ".settings.lock"
+    try:
+        fd = os.open(
+            lock_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+        )
+    except OSError:
+        raise ModeConfigError("mode_dispatch_lock_unavailable") from None
+    acquired = False
+    try:
+        info = os.fstat(fd)
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid()
+            or info.st_mode & 0o077
+            or info.st_nlink != 1
+        ):
+            raise ModeConfigError("unsafe_mode_dispatch_lock")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except (OSError, BlockingIOError):
+            raise ModeConfigError("mode_dispatch_busy") from None
+        # Read after acquiring the lock: mode may have changed while
+        # earlier native and workload evidence was being collected.
+        yield read_mode(config_root=root)
+    finally:
+        if acquired:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
