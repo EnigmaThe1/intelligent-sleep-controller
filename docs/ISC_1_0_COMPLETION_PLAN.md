@@ -148,8 +148,16 @@ optional tray for ordinary user operation. Each window owns only its own
 inhibitor and releases it when closed. No inhibitor starts automatically,
 and OFF/MONITOR/ON semantics remain unchanged.
 
-Desktop GUI acceptance, reboot persistence of OFF/MONITOR, and GNOME
-automatic-suspend conflict handling remain Milestone 1 release checks.
+The GUI now states explicitly that **OFF currently disables ISC automatic
+sleep only**. GNOME's independent automatic sleep settings are not silently
+changed: a user-clicked shortcut opens GNOME Power Settings, using the
+existing native launcher. The tray OFF label uses the same limited claim.
+This avoids misleading users while maintaining reversible, explicit OS
+power preferences.
+
+Desktop GUI acceptance, reboot persistence of OFF/MONITOR, and an
+authorised reversible approach to GNOME automatic-suspend conflicts
+remain Milestone 1 release checks.
 Hardware automatic suspend is still disarmed.
 
 ### Milestone 3 — practical protected-work command
