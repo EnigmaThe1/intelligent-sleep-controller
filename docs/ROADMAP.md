@@ -48,6 +48,7 @@
 - [x] Step 99f: opt-in bounded unique systemd user-bus name-owner query and pure sender correlation (not integrated into live reader)
 - [x] Step 99g: bracket opt-in live user-manager signal candidates with private D-Bus owner queries; matches remain unverified and non-authoritative
 - [x] Step 99h: pure bounded in-memory native observation-window continuity diagnostics; sticky UNKNOWN on source loss/changes and gaps, no live supervisor wiring
+- [x] Step 99i: opt-in bounded multi-window runner combining live bracketed systemd observations with sticky-UNKNOWN continuity (no service wiring or coverage authority)
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
