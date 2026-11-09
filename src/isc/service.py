@@ -17,6 +17,7 @@ from .background_observer import BackgroundProcessObserver
 from .background_scheduler import BackgroundSchedulerObserver
 from .background_independent_services import BackgroundIndependentServiceObserver
 from .settings import ModeConfigError, read_mode
+from .mode_gate import resolve_mode
 
 
 @dataclass(frozen=True)
@@ -32,10 +33,14 @@ class MonitorUnavailable(RuntimeError):
 
 
 def _read_preference() -> str:
+    """All receiver mode checks use the same disarmed, fail-closed gate."""
     try:
-        return read_mode().mode
-    except ModeConfigError as exc:
+        effective = resolve_mode(read_mode())
+    except ModeConfigError:
         raise MonitorUnavailable("invalid_or_unavailable_mode") from None
+    if not effective.configuration_valid:
+        raise MonitorUnavailable("invalid_or_unavailable_mode")
+    return effective.mode
 
 
 def serve_monitor(*, max_seconds: float = 0, poll_seconds: float = 0.5, quiet: bool = False) -> MonitorSummary:
