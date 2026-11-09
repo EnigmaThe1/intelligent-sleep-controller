@@ -12,6 +12,7 @@ import time
 from .manual_power import assess_manual_suspend, request_dialog_suspend
 from .receiver import discover_monitor_socket, read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
+from .mode_gate import resolve_mode
 from .tray_runtime import TrayMonitorProcess
 from .tray_singleton import TrayAlreadyRunning, TrayLockUnavailable, single_tray_instance
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
@@ -33,7 +34,10 @@ class TraySnapshot:
 def tray_snapshot() -> TraySnapshot:
     try:
         current = read_mode()
-        mode, configured, valid = current.mode, current.configured, True
+        effective = resolve_mode(current)
+        mode, configured, valid = (
+            effective.mode, current.configured, effective.configuration_valid,
+        )
     except ModeConfigError:
         mode, configured, valid = "off", False, False
     return TraySnapshot(
