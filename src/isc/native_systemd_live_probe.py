@@ -23,12 +23,13 @@ _COMMAND = ("busctl", "--user", "--no-pager", "--match=" + _MATCH,
 _ALLOWED_ENV = ("PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
                 "LANG", "LC_ALL")
 _HEADER = re.compile(
-    rb"(?:^|\n)\xe2\x80\xa3 Type=signal[^\n]{0,200}\n"
+    rb"\A\xe2\x80\xa3 Type=signal[^\n]{0,200}\n"
     rb"[ \t]+Sender=(?P<sender>:[0-9]+\.[0-9]+)[ \t]+"
     rb"Path=/org/freedesktop/systemd1[ \t]+"
     rb"Interface=org\.freedesktop\.systemd1\.Manager[ \t]+"
     rb"Member=(JobNew|JobRemoved|UnitNew|UnitRemoved)[ \t]*(?:\r?\n)"
 )
+_BANNER = b"Monitoring bus message stream.\\n"
 _MAX_BYTES = 16384
 
 
@@ -41,13 +42,22 @@ class LiveSignalProbe:
     task_owner_authenticated: bool = False
 
 
-def _recognise_header(raw: bytes) -> bool:
-    """Require both busctl's signal header and manager member header.
+def _first_frame_match(raw: bytes) -> re.Match[bytes] | None:
+    """Accept only an initial busctl header, never a later payload lookalike.
 
-    This cannot authenticate the sender; a later adapter must correlate the
-    unique bus name to the systemd manager and handle owner changes.
+    The exact optional monitor banner is the only permitted prefix.
+    Text-format busctl is still not a reliable D-Bus framing protocol,
+    so even a matching first header is diagnostic and unauthenticated.
     """
-    return _HEADER.search(raw) is not None
+    if not isinstance(raw, bytes):
+        return None
+    stream = raw[len(_BANNER):] if raw.startswith(_BANNER) else raw
+    return _HEADER.match(stream)
+
+
+def _recognise_header(raw: bytes) -> bool:
+    """Conservative first-header recognition; never scans payload text."""
+    return _first_frame_match(raw) is not None
 
 
 def probe_live_user_signal(
@@ -87,7 +97,7 @@ def probe_live_user_signal(
                 raw.extend(block)
                 if len(raw) >= _MAX_BYTES:
                     return unknown
-                match = _HEADER.search(raw)
+                match = _first_frame_match(bytes(raw))
                 if match is not None:
                     if _sender_callback is not None:
                         # Ephemeral private unique name, never in result/log.
