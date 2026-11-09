@@ -32,6 +32,22 @@ closes, ISC can request a transient systemd *user* service running a native
 PYTHONPATH=src /usr/bin/python3 -m isc protect-detached -- /usr/bin/sleep 120
 ```
 
+ISC reports the generated `isc-protected-*.service` unit name. When
+the service is still running, ISC can **verify its current inhibitor ownership**
+without starting or stopping anything:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc protected-status isc-protected-0123456789abcdef.service
+```
+
+Replace the sample name with the actual unit name printed at launch.
+The read-only check requires a running user service and an exact matching
+user ID, process ID, block-mode idle/sleep lock and ISC owner/reason in
+systemd-logind; it rechecks the service after the inhibitor inventory.
+A successful result means **VERIFIED NOW**, not that a future or already
+finished job remains protected. A finished transient service may no longer
+exist, so its status is simply not verifiable.
+
 ISC reports the generated `isc-protected-*.service` unit name. The user
 service is temporary (`--collect`), with no installed unit files and no
 changes to other processes or system power settings. `systemd-run` waits
