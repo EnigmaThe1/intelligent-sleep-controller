@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from isc.auto_suspend import attempt_automatic_suspend
 from isc.manual_power import ManualSuspendResult, SuspendAssessment
+from isc.auto_native import AutoNativeAssessment
 from isc.mode_gate import EffectiveMode
 from isc.policy import Snapshot, WorkItem, WorkState
 
@@ -29,7 +30,7 @@ def eligible():
 
 
 def native_ok():
-    return SuspendAssessment(True, "yes", (), 0, True)
+    return AutoNativeAssessment(True, "yes", ())
 
 
 class AutomaticSuspendTests(unittest.TestCase):
@@ -124,12 +125,12 @@ class AutomaticSuspendTests(unittest.TestCase):
         )
         self.assertFalse(row.submitted)
 
-    def test_manual_preflight_never_grants_auto_coverage(self):
+    def test_manual_preflight_is_never_accepted_as_auto_preflight(self):
         submit = Mock()
         row = attempt_automatic_suspend(
             mode_reader=mode_on, snapshot_reader=eligible,
             native_preflight=lambda: SuspendAssessment(
-                True, "yes", (), 0, False,
+                True, "yes", (), 0, True,
             ), submit=submit,
         )
         self.assertEqual(row.reason, "native_safety_check_blocked")
@@ -139,8 +140,8 @@ class AutomaticSuspendTests(unittest.TestCase):
         submit = Mock()
         row = attempt_automatic_suspend(
             mode_reader=mode_on, snapshot_reader=eligible,
-            native_preflight=lambda: SuspendAssessment(
-                True, "challenge", (), 0, True,
+            native_preflight=lambda: AutoNativeAssessment(
+                False, "challenge", ("native_suspend_capability_unverified_or_unavailable",),
             ), submit=submit,
         )
         self.assertEqual(row.reason, "native_safety_check_blocked")
@@ -150,8 +151,8 @@ class AutomaticSuspendTests(unittest.TestCase):
         submit = Mock()
         row = attempt_automatic_suspend(
             mode_reader=mode_on, snapshot_reader=eligible,
-            native_preflight=lambda: SuspendAssessment(
-                False, "yes", ("sleep_inhibitor",), 0, True,
+            native_preflight=lambda: AutoNativeAssessment(
+                False, "yes", ("sleep_inhibitor",),
             ), submit=submit,
         )
         self.assertEqual(row.reason, "native_safety_check_blocked")
