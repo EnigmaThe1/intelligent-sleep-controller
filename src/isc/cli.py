@@ -40,6 +40,7 @@ from .desktop_launcher import (
 from .desktop_window import run_window
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
 from .protected_work import run_protected_work
+from .detached_work import launch_detached_work
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
     display_support, display_off, open_power_settings,
@@ -1225,10 +1226,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("ISC protected work unavailable; no command was started.")
         return result
 
+    if incoming and incoming[0] == "protect-detached":
+        if len(incoming) < 3 or incoming[1] != "--":
+            print("Usage: isc protect-detached -- COMMAND [ARGS...]")
+            print("Only commands explicitly provided by the operator can start.")
+            return 2
+        result = launch_detached_work(incoming[2:])
+        if not result.started:
+            print("Protected user job not confirmed: " + result.reason)
+            print("No ISC settings or system services were modified.")
+            return 2
+        print("Transient user service started: " + str(result.unit))
+        print("Native sleep inhibitor acquisition: NOT YET VERIFIED")
+        print("The command runs independently of this terminal.")
+        print("Inspect the user unit and native inhibitors before relying on protection.")
+        print("Do not assume unrelated scheduled or detached work is protected.")
+        return 0
+
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="ISC Linux sleep controls (automatic suspend not enabled)",
-        epilog="Protect a foreground task: isc protect -- COMMAND [ARGS...]",
+        epilog="Foreground: isc protect -- CMD; detached: isc protect-detached -- CMD",
     )
     parser.add_argument(
         "command", nargs="?",
