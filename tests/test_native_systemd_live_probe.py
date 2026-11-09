@@ -52,6 +52,35 @@ class NativeLiveSignalTests(unittest.TestCase):
             b"Interface=org.freedesktop.systemd1.Manager Member=JobNew\n")
         self.assertFalse(_recognise_header(payload))
 
+    def test_payload_imitating_complete_header_must_not_match(self):
+        payload = (b'\xe2\x80\xa3 Type=signal  Endian=l  Cookie=3\n'
+                   b'  Sender=:1.12  Path=/org/freedesktop/systemd1  '
+                   b'Interface=org.freedesktop.systemd1.Manager  Member=JobNew\n')
+        self.assertFalse(_recognise_header(b'Before\n' + payload))
+        self.assertFalse(_recognise_header(
+            b'MESSAGE \"s\" {\n' + payload))
+
+    def test_unrecognised_first_message_blocks_later_fake_header(self):
+        first = FRAME.replace(b'Member=JobNew', b'Member=Reloading')
+        self.assertFalse(_recognise_header(first + FRAME))
+
+    def test_unrecognised_banner_does_not_get_skipped(self):
+        self.assertFalse(_recognise_header(
+            b'Unexpected monitor output\n' + FRAME))
+
+    def test_header_fragment_after_private_text_is_rejected(self):
+        self.assertFalse(_recognise_header(
+            b'private payload data\n' + FRAME))
+
+    def test_exact_banner_plus_initial_frame_is_valid(self):
+        self.assertTrue(_recognise_header(PREFIX + FRAME))
+
+    def test_first_header_sender_is_captured_without_logging(self):
+        from isc.native_systemd_live_probe import _first_frame_match
+        result = _first_frame_match(PREFIX + FRAME)
+        self.assertIsNotNone(result)
+        self.assertEqual(result.group('sender'), b':1.12')
+
     def test_empty_and_invalid_duration_fail_closed(self):
         for value in (0, 11, True, None, 1.5, "3", -1):
             with self.subTest(value=value):
