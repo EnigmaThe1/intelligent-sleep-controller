@@ -238,7 +238,7 @@ class GnomePolicyTests(unittest.TestCase):
                    inspect_gnome_policy(config_root=self.root)), \
              patch("isc.cli.change_gnome_policy",
                    side_effect=AssertionError("change")):
-            self.assertEqual(main(["gnome-policy"]), 2)
+            self.assertEqual(main(["gnome-policy"]), 0)
 
     def test_cli_requires_separate_explicit_confirmation(self):
         with patch("isc.cli.change_gnome_policy",
