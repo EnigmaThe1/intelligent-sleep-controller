@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from isc.auto_suspend import attempt_automatic_suspend
 from isc.manual_power import ManualSuspendResult, SuspendAssessment
+from isc.auto_native import AutoNativeSubmitResult
 from isc.auto_native import AutoNativeAssessment
 from isc.mode_gate import EffectiveMode
 from isc.policy import Snapshot, WorkItem, WorkState
@@ -63,7 +64,7 @@ class AutomaticSuspendTests(unittest.TestCase):
             mode_reader=lambda: EffectiveMode("monitor", True, False, True),
             snapshot_reader=lambda: eligible(),
             native_preflight=native_ok,
-            submit=lambda: ManualSuspendResult(True, "submitted"),
+            submit=lambda: AutoNativeSubmitResult(True, "submitted"),
         )
         self.assertEqual(row.reason, "automatic_suspend_disarmed")
 
@@ -72,7 +73,7 @@ class AutomaticSuspendTests(unittest.TestCase):
             mode_reader=lambda: EffectiveMode("on", False, False, True),
             snapshot_reader=lambda: eligible(),
             native_preflight=native_ok,
-            submit=lambda: ManualSuspendResult(True, "submitted"),
+            submit=lambda: AutoNativeSubmitResult(True, "submitted"),
         )
         self.assertFalse(row.submitted)
 
@@ -107,7 +108,7 @@ class AutomaticSuspendTests(unittest.TestCase):
                 user_idle_seconds=1900, coverage_complete=True,
             ),
             native_preflight=native_ok,
-            submit=lambda: ManualSuspendResult(True, "submitted"),
+            submit=lambda: AutoNativeSubmitResult(True, "submitted"),
         )
         self.assertFalse(row.submitted)
 
@@ -121,7 +122,7 @@ class AutomaticSuspendTests(unittest.TestCase):
                 work_items=(WorkItem("job", WorkState.ACTIVE),),
             ),
             native_preflight=native_ok,
-            submit=lambda: ManualSuspendResult(True, "submitted"),
+            submit=lambda: AutoNativeSubmitResult(True, "submitted"),
         )
         self.assertFalse(row.submitted)
 
@@ -135,6 +136,30 @@ class AutomaticSuspendTests(unittest.TestCase):
         )
         self.assertEqual(row.reason, "native_safety_check_blocked")
         submit.assert_not_called()
+
+    def test_manual_submit_result_cannot_authorize_auto_sleep(self):
+        row = attempt_automatic_suspend(
+            mode_reader=mode_on, snapshot_reader=eligible,
+            native_preflight=native_ok,
+            submit=lambda: ManualSuspendResult(True, "request_accepted_by_systemd"),
+        )
+        self.assertEqual(row.reason, "native_request_unverified")
+        self.assertFalse(row.submitted)
+
+    def test_injected_on_cannot_call_real_submit_with_shipped_mode(self):
+        import isc.auto_native as native
+        with patch.object(native, "current_mode", return_value=mode_off()), \
+             patch.object(native, "read_host_snapshot",
+                          side_effect=AssertionError("must not sample")), \
+             patch.object(native.subprocess, "run",
+                          side_effect=AssertionError("must not sleep")):
+            row = attempt_automatic_suspend(
+                mode_reader=mode_on,
+                snapshot_reader=eligible,
+                native_preflight=native_ok,
+            )
+        self.assertFalse(row.submitted)
+        self.assertEqual(row.reason, "native_request_refused")
 
     def test_native_capability_challenge_is_not_auto_safe(self):
         submit = Mock()
@@ -183,7 +208,7 @@ class AutomaticSuspendTests(unittest.TestCase):
         submit.assert_not_called()
 
     def test_valid_synthetic_conditions_call_injected_submit_once(self):
-        submit = Mock(return_value=ManualSuspendResult(True, "submitted"))
+        submit = Mock(return_value=AutoNativeSubmitResult(True, "submitted"))
         with patch("subprocess.run", side_effect=AssertionError("real sleep")):
             row = attempt_automatic_suspend(
                 mode_reader=mode_on, snapshot_reader=eligible,
@@ -198,7 +223,7 @@ class AutomaticSuspendTests(unittest.TestCase):
         row = attempt_automatic_suspend(
             mode_reader=mode_on, snapshot_reader=eligible,
             native_preflight=fails,
-            submit=lambda: ManualSuspendResult(True, "submitted"),
+            submit=lambda: AutoNativeSubmitResult(True, "submitted"),
         )
         self.assertEqual(row.reason, "safety_source_unavailable")
         self.assertNotIn("private", repr(row))
