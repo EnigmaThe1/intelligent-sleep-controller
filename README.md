@@ -257,6 +257,39 @@ running tray-managed monitor: IPC ownership ensures only one receives events.
 **Native user-service installation is a change to desktop startup behaviour**
 and should be explicitly approved and checked on the actual machine.
 
+### GNOME automatic-sleep policy (opt-in, reversible)
+
+GNOME's own automatic idle suspend can conflict with ISC's decision. The
+following command checks its AC and battery idle-suspend timeouts **without
+changing any settings**:
+
+```bash
+PYTHONPATH=src /usr/bin/python3 -m isc gnome-policy
+```
+
+An optional **separately confirmed** operation can set both GNOME timeout
+values to zero, first saving their exact original values to a private
+user-owned record. A restore operation returns the original values after
+checking they have not been replaced by unrelated changes:
+
+```bash
+# Affects GNOME's automatic idle-suspend policy; review before executing.
+PYTHONPATH=src /usr/bin/python3 -m isc gnome-policy --power-policy disable --confirm
+# To reverse the ISC-managed change:
+PYTHONPATH=src /usr/bin/python3 -m isc gnome-policy --power-policy restore --confirm
+```
+
+Neither operation is run automatically when selecting OFF/MONITOR or
+launching ISC. A failed or interrupted update keeps the private recovery
+record; repeating the explicit restore is permitted after partial progress.
+ISC will not overwrite an unexpected third-party edit. This does not
+disable manually requested sleep or OS administrator controls.
+
+**Release note:** The ON engine is still disarmed. Automatic lifecycle
+ownership and uninstall-time recovery remain to be completed; these
+commands provide an operator-controlled, reversible coordination option,
+not a completed automatic desktop power-policy integration.
+
 ### Keep Awake in the main desktop window
 
 The GNOME Show Apps window now offers **Keep Awake 30 min**,
