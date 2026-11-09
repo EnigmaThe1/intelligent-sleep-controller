@@ -22,10 +22,11 @@ _COMMAND = ("busctl", "--user", "--no-pager", "--match=" + _MATCH,
 _ALLOWED_ENV = ("PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
                 "LANG", "LC_ALL")
 _HEADER = re.compile(
-    rb"(?m)^\s*Sender=:[0-9]+\.[0-9]+\s+"
-    rb"Path=/org/freedesktop/systemd1\s+"
-    rb"Interface=org\.freedesktop\.systemd1\.Manager\s+"
-    rb"Member=(JobNew|JobRemoved|UnitNew|UnitRemoved)\s*$"
+    rb"(?:^|\n)\xe2\x80\xa3 Type=signal[^\n]{0,200}\n"
+    rb"[ \t]+Sender=:[0-9]+\.[0-9]+[ \t]+"
+    rb"Path=/org/freedesktop/systemd1[ \t]+"
+    rb"Interface=org\.freedesktop\.systemd1\.Manager[ \t]+"
+    rb"Member=(JobNew|JobRemoved|UnitNew|UnitRemoved)[ \t]*(?:\r?\n)"
 )
 _MAX_BYTES = 16384
 
@@ -45,13 +46,7 @@ def _recognise_header(raw: bytes) -> bool:
     This cannot authenticate the sender; a later adapter must correlate the
     unique bus name to the systemd manager and handle owner changes.
     """
-    match = _HEADER.search(raw)
-    if match is None:
-        return False
-    prefix = raw[:match.start()]
-    return b"Type=signal" in prefix and (
-        b"\xe2\x80\xa3" in prefix or b"Type=signal" in prefix
-    )
+    return _HEADER.search(raw) is not None
 
 
 def probe_live_user_signal(*, seconds: int = 3) -> LiveSignalProbe:
