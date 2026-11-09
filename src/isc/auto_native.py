@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import subprocess
+import time
 
 from .host_safety import read_host_snapshot
 from .inhibitors import Inhibitor, read_inhibitors
 from .manual_power import can_suspend
 from .mode_gate import current_mode
+from .settings import mode_dispatch_guard
 from .policy import Snapshot, evaluate
 
 
@@ -81,7 +83,7 @@ def submit_automatic_native() -> AutoNativeSubmitResult:
     No injectable readers: an artificial ON from a unit test must never
     grant real power authority. The current release disarms ON in settings
     and mode_gate. Transition serialization, hardware validation and trusted
-    workload coverage must be completed *before* ON is ever enabled.
+    workload coverage must be completed *before* ON is ever enabled.\n    An OFF requested after native dispatch cannot revoke a suspend already\n    accepted by logind. The settings lock establishes a single ordering.
     """
     try:
         mode = current_mode()
@@ -106,14 +108,29 @@ def submit_automatic_native() -> AutoNativeSubmitResult:
         latest = read_host_snapshot()
         if not isinstance(latest, Snapshot) or not evaluate(latest).eligible:
             return AutoNativeSubmitResult(False, "last_workload_check_blocked")
+        observed_at = time.monotonic()
 
-        # logind rechecks inhibitors; this does NOT solve all TOCTOU races.
-        command = subprocess.run(
-            _AUTO_COMMAND, capture_output=True, text=True,
-            check=False, timeout=20,
-        )
+        # The same exclusive lock used by set_mode orders OFF/MONITOR
+        # changes against actual native dispatch. Its acquisition is
+        # non-blocking, and no slow safety probes happen while it is held.
+        # The native command is bounded: do NOT obstruct OFF for 20s.
+        with mode_dispatch_guard() as persisted:
+            if not persisted.configured or persisted.mode != "on":
+                return AutoNativeSubmitResult(False, "operator_mode_changed")
+            if time.monotonic() - observed_at > 1.0:
+                return AutoNativeSubmitResult(False, "last_snapshot_stale")
+            # systemd enforces inhibitors; unknown late task activity
+            # remains a release blocker, so ON is still not selectable.
+            command = subprocess.run(
+                _AUTO_COMMAND, capture_output=True, text=True,
+                check=False, timeout=3,
+            )
         if command.returncode != 0:
             return AutoNativeSubmitResult(False, "native_suspend_rejected")
         return AutoNativeSubmitResult(True, "request_accepted_by_systemd")
-    except (OSError, ValueError, RuntimeError, TypeError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
+        # Request may already have reached logind before this timeout.
+        # Never report it as definitively rejected or safe to retry.
+        return AutoNativeSubmitResult(False, "native_suspend_outcome_unknown")
+    except (OSError, ValueError, RuntimeError, TypeError):
         return AutoNativeSubmitResult(False, "native_suspend_unavailable")
