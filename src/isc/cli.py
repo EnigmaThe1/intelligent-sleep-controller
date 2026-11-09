@@ -15,6 +15,7 @@ from .gnome_inhibitors import read_gnome_inhibit_flags
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_diagnostics import check_hook_delivery
 from .hook_watch import watch_hook_observations
+from .hook_wiring_diagnostics import inspect_hook_wiring
 from .agent_integration_readiness import inspect_agent_integration
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
 from .hook_install import HookInstallError, modify_existing_hooks
@@ -533,6 +534,25 @@ def hook_watch_cli(*, source: str, seconds: float) -> int:
     print("No event establishes completion or permission to suspend.")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     return 0 if result.claimed_events is not None else 2
+
+
+def hook_wiring_cli(*, source: str) -> int:
+    """Diagnose configured ISC commands without executing or printing them."""
+    result = inspect_hook_wiring(source)
+    print("ISC CODING-AGENT HOOK WIRING — READ ONLY")
+    print(f"Source: {result.source}")
+    print(f"Configuration: {result.state}")
+    print(f"Configured ISC event types: {result.installed_events}")
+    print(f"Missing ISC event types: {result.missing_events}")
+    print(f"Conditionally matched event types: {result.conditional_events}")
+    print(f"Event types with missing local dependencies: {result.missing_dependencies}")
+    print(f"Event types with duplicate ISC handlers: {result.duplicate_events}")
+    print("Local command paths are checked, not executed.")
+    print("Configuration presence does not prove real application delivery.")
+    print("No private commands, paths or configuration contents displayed.")
+    print("No hooks, agents, services or power settings changed.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0 if result.state != "CONFIG_UNAVAILABLE" else 2
 
 
 def agent_integration() -> int:
@@ -1146,7 +1166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "hook-wiring", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1289,6 +1309,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.source is None:
             parser.error("hook-watch requires --source")
         return hook_watch_cli(source=args.source, seconds=args.seconds)
+    if args.command == "hook-wiring":
+        if args.source is None:
+            parser.error("hook-wiring requires --source")
+        return hook_wiring_cli(source=args.source)
     if args.command in ("hook-enable", "hook-disable"):
         if args.source is None:
             parser.error("select --source claude_code or --source codex")
