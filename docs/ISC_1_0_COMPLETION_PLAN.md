@@ -181,6 +181,22 @@ exercise this boundary without issuing a real power command.
 scheduled-job/wake safety, GNOME auto-sleep coordination, or reliable
 hardware resume. These remain release-critical prerequisites.
 
+### Milestone 1 — reversible GNOME idle-sleep coordination
+
+Added a deliberately opt-in GNOME power-policy controller. A read-only
+`isc gnome-policy` shows both AC/battery GNOME idle timeout settings.
+Separately confirmed disable/restore operations use only fixed
+`gsettings` schema keys, save original values in a private durable backup
+**before** any modifications, verify every write, and retain recovery state
+on partial failures. An unexpected external change is not overwritten.
+
+**No GNOME settings have been changed by development or CI.** ISC mode
+changes, tray startup and application-window actions do not automatically
+run this controller. The user's further authorisation is required before
+actually changing the host's power settings. Full automatic ownership
+across boot, session exit and uninstall is still a Milestone 1 release gate.
+On a desktop with unstable resume, nothing here enables unattended sleep.
+
 ### Milestone 3 — practical protected-work command
 
 Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
