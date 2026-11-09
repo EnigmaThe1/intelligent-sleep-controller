@@ -45,6 +45,7 @@
 - [x] Refuse ambiguous duplicate process-to-task claims and retain UNKNOWN after process observation gaps (pure model only)
 - [x] Preserve UNKNOWN when a previously observed descendant vanishes or changes identity, even if other children keep counts unchanged (pure model only)
 - [x] Opt-in read-only NativeWorkSupervisor composes root/child lineage with service invocation/cgroup membership checks; partial evidence only, not running-service or authenticated-owner integration
+- [x] Time-aware native-supervision `fresh_states(now=...)` and aggregate `fresh_summary(now=...)` conservatively expire evidence beyond 60 seconds, refuse unpinned native enrollment, changed/unknown process membership and reversed time; UNKNOWN never authorises sleep, no host setting changes.
 - [x] Route MONITOR's existing process snapshots into a dormant, in-process opt-in native supervisor; no unauthenticated socket enrollment, no automatic task discovery, no suspend authority
 - [x] Opt-in systemd MainPID verification: bracket service activation/cgroup identity and same-user stable process identity before in-process enrollment; no task-owner authentication or automatic discovery
 - [x] Revalidate native enrollment against its original systemd invocation, process identity and cgroup on each opt-in observation; changed/missing evidence becomes sticky UNKNOWN (not application-level authentication)
