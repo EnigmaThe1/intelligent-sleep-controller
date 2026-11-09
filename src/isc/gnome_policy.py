@@ -171,7 +171,12 @@ def inspect_gnome_policy(
     """Read-only status. Never infer unverified power settings are disabled."""
     ac, battery = (_read_timeout(k) for k in _KEYS)
     try:
-        backup = _read_backup(_backup_path(config_root))
+        root = _config_root(config_root)
+        directory = root / PROJECT_DIR
+        if not directory.exists() and not directory.is_symlink():
+            backup = None  # Fresh ISC install: preview needs no files.
+        else:
+            backup = _read_backup(_backup_path(config_root))
     except (GnomePolicyError, OSError, ValueError):
         return GnomePolicyStatus(ac, battery, False, True, "backup_unverified")
     if ac is None or battery is None:
