@@ -13,6 +13,7 @@ from isc.desktop_window import (
 )
 from isc.receiver import MonitorHealth
 from isc.settings import ModeConfigError, ModeStatus
+from isc.keepawake import KeepAwakeError, KeepAwakeStatus
 
 
 class DesktopWindowTests(unittest.TestCase):
@@ -113,6 +114,105 @@ class DesktopWindowTests(unittest.TestCase):
         controller._message = Mock()
         controller.set_monitor_mode("off")
         self.assertTrue(controller._message.called)
+
+
+    @patch("isc.desktop_window.read_monitor_health", return_value=None)
+    @patch("isc.desktop_window.read_mode", return_value=ModeStatus("on", True))
+    def test_unsupported_on_is_never_shown_as_active(self, mode, health):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.refresh()
+        text = controller.status_label.set_text.call_args.args[0]
+        self.assertIn("OFF (invalid settings)", text)
+
+    @patch("isc.desktop_window.read_monitor_health", return_value=None)
+    @patch("isc.desktop_window.read_mode", return_value=ModeStatus("monitor", True))
+    def test_keepawake_status_shows_remaining_minutes(self, mode, health):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.awake_label = Mock()
+        controller._awake = Mock()
+        controller._awake.status.return_value = KeepAwakeStatus(True, 64)
+        controller.refresh()
+        controller.awake_label.set_text.assert_called_once_with(
+            "Keep Awake: active (2 min remaining)"
+        )
+        controller._awake.start.assert_not_called()
+
+    @patch("isc.desktop_window.read_monitor_health", return_value=None)
+    @patch("isc.desktop_window.read_mode", return_value=ModeStatus("monitor", True))
+    def test_keepawake_indefinite_status(self, mode, health):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.awake_label = Mock()
+        controller._awake = Mock()
+        controller._awake.status.return_value = KeepAwakeStatus(True, None)
+        controller.refresh()
+        self.assertIn(
+            "window must stay open",
+            controller.awake_label.set_text.call_args.args[0],
+        )
+
+    def test_keepawake_starts_only_with_explicit_click(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller._awake.start.return_value = KeepAwakeStatus(True, 1800)
+        controller._message = Mock()
+        controller.refresh = Mock()
+        controller.start_keep_awake(30)
+        controller._awake.start.assert_called_once_with(30)
+        controller._message.assert_not_called()
+        controller.refresh.assert_called_once()
+
+    def test_indefinite_keepawake_is_explicit(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller._awake.start.return_value = KeepAwakeStatus(True, None)
+        controller.refresh = Mock()
+        controller.start_keep_awake(None)
+        controller._awake.start.assert_called_once_with(None)
+
+    def test_invalid_keepawake_duration_does_not_start(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller.start_keep_awake(999)
+        controller._awake.start.assert_not_called()
+
+    def test_failed_native_keepawake_reports_error(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller._awake.start.side_effect = KeepAwakeError("private")
+        controller._message = Mock()
+        controller.refresh = Mock()
+        controller.start_keep_awake(30)
+        controller._message.assert_called_once()
+        self.assertNotIn("private", str(controller._message.call_args))
+
+    def test_cancel_targets_only_window_owned_manager(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller.refresh = Mock()
+        controller.cancel_keep_awake()
+        controller._awake.cancel.assert_called_once_with()
+        controller.refresh.assert_called_once()
+
+    def test_failed_cancellation_reports_error(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller._awake.cancel.side_effect = KeepAwakeError("private")
+        controller._message = Mock()
+        controller.refresh = Mock()
+        controller.cancel_keep_awake()
+        controller._message.assert_called_once()
+        self.assertNotIn("private", str(controller._message.call_args))
+
+    def test_window_shutdown_closes_owned_keepawake(self):
+        controller = object.__new__(DesktopWindow)
+        controller._awake = Mock()
+        controller.Gtk = Mock()
+        controller._close_window()
+        controller._awake.close.assert_called_once()
+        controller.Gtk.main_quit.assert_called_once()
 
 
 if __name__ == "__main__":
