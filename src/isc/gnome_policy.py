@@ -178,8 +178,15 @@ def inspect_gnome_policy(
         return GnomePolicyStatus(ac, battery, backup is not None, True,
                                  "gnome_policy_unverified")
     if backup is not None and (ac, battery) != (0, 0):
-        return GnomePolicyStatus(ac, battery, True, True,
-                                 "gnome_policy_changed_externally")
+        known = all(
+            observed in (0, original)
+            for observed, original in zip((ac, battery), backup)
+        )
+        return GnomePolicyStatus(
+            ac, battery, True, True,
+            "gnome_policy_incomplete" if known
+            else "gnome_policy_changed_externally",
+        )
     return GnomePolicyStatus(
         ac, battery, backup is not None,
         ac != 0 or battery != 0,
@@ -206,37 +213,40 @@ def change_gnome_policy(
                 raise GnomePolicyError("gnome_policy_unverified")
 
             if operation == "disable":
-                if saved is not None:
-                    if current != (0, 0):
-                        raise GnomePolicyError("gnome_policy_changed_externally")
-                    return inspect_gnome_policy(config_root=config_root)
-                if current == (0, 0):
-                    return inspect_gnome_policy(config_root=config_root)
-                _save_backup(path, current)
-
+                if saved is None:
+                    if current == (0, 0):
+                        return inspect_gnome_policy(config_root=config_root)
+                    _save_backup(path, current)
+                    saved = current
+                if not all(
+                    observed in (0, original)
+                    for observed, original in zip(current, saved)
+                ):
+                    raise GnomePolicyError("gnome_policy_changed_externally")
                 for index, key in enumerate(_KEYS):
                     if current[index] != 0:
                         if not _write_timeout(key, 0) or _read_timeout(key) != 0:
-                            # Restore only when the other key still matches
-                            # the value ISC wrote; never overwrite edits.
-                            for j in range(index + 1):
-                                actual = _read_timeout(_KEYS[j])
-                                if actual == 0 and current[j] != 0:
-                                    _write_timeout(_KEYS[j], current[j])
+                            # The saved backup permits an explicit recovery
+                            # after a partial failure; never discard it.
                             raise GnomePolicyError("gnome_policy_disable_incomplete")
                 return inspect_gnome_policy(config_root=config_root)
 
             if saved is None:
                 raise GnomePolicyError("gnome_backup_not_owned")
-            if current != (0, 0):
+            if not all(
+                observed in (0, original)
+                for observed, original in zip(current, saved)
+            ):
                 raise GnomePolicyError("gnome_policy_changed_externally")
             for index, key in enumerate(_KEYS):
-                if saved[index] != 0:
+                if current[index] != saved[index]:
                     if not _write_timeout(key, saved[index]) or (
                         _read_timeout(key) != saved[index]
                     ):
                         raise GnomePolicyError("gnome_policy_restore_incomplete")
-            # Recovery state is retained on partial failure.
+            # Backup remains available until both values are verified.
+            if tuple(_read_timeout(key) for key in _KEYS) != saved:
+                raise GnomePolicyError("gnome_policy_restore_incomplete")
             path.unlink()
             return inspect_gnome_policy(config_root=config_root)
     except GnomePolicyError:
