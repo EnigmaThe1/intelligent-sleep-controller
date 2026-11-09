@@ -160,6 +160,27 @@ authorised reversible approach to GNOME automatic-suspend conflicts
 remain Milestone 1 release checks.
 Hardware automatic suspend is still disarmed.
 
+### Milestone 2 — ordered final OFF/dispatch boundary
+
+The automatic native request now acquires the **same private settings lock**
+as mode changes and re-reads the saved preference under that lock. Busy,
+missing or unsafe locks fail closed. Concurrent native requests cannot be
+issued through the guard. The native systemctl request has a **3-second**
+maximum wait rather than holding up an OFF selection for 20 seconds;
+timeout is reported as **outcome unknown**, never as proved rejection.
+Even an apparently idempotent OFF update must acquire the writer lock:
+a stale early return could otherwise lose a requested OFF transition.
+
+This establishes an ordering guarantee for ISC-controlled transitions:
+if OFF is committed first, a later ISC automatic request cannot dispatch.
+If a native suspend was accepted first, a subsequent OFF cannot recall that
+operating-system request. Synthetic concurrency and submission tests
+exercise this boundary without issuing a real power command.
+
+**Still disarmed:** This does not certify complete workload evidence,
+scheduled-job/wake safety, GNOME auto-sleep coordination, or reliable
+hardware resume. These remain release-critical prerequisites.
+
 ### Milestone 3 — practical protected-work command
 
 Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
