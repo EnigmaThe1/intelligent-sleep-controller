@@ -40,6 +40,8 @@ class SupervisionSummary:
     observed_at: float | None
     coverage_verified: bool = False
     task_owner_authenticated: bool = False
+    sampling_gap_seconds: float | None = None
+    interval_coverage_verified: bool = False
 
 
 class NativeWorkSupervisor:
@@ -372,6 +374,7 @@ class NativeWorkSupervisor:
 
     def summary(self) -> SupervisionSummary:
         states = self._bindings.states()
+        binding_summary = self._bindings.summary()
         # Never interpret an unobserved/changed descendant as completed.
         uncertain = sum(
             key in self._sticky_unknown or state is not WorkState.ACTIVE
@@ -382,6 +385,7 @@ class NativeWorkSupervisor:
         return SupervisionSummary(
             registered=len(self._scopes), observed_members=self._observed_members,
             unknown=uncertain, observed_at=self._last_time,
+            sampling_gap_seconds=binding_summary.sampling_gap_seconds,
         )
 
     def fresh_states(self, *, now: float) -> tuple[WorkState, ...]:
@@ -427,6 +431,7 @@ class NativeWorkSupervisor:
             observed_members=sum(state is WorkState.ACTIVE for state in states),
             unknown=sum(state is WorkState.UNKNOWN for state in states),
             observed_at=self._last_time,
+            sampling_gap_seconds=self._bindings.summary().sampling_gap_seconds,
         )
 
     def states(self) -> tuple[WorkState, ...]:
