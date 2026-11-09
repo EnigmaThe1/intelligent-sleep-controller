@@ -72,7 +72,7 @@ class HostSafetyTests(unittest.TestCase):
 
     def test_unknown_process_inventory_is_blocker(self):
         row = state(processes=None)
-        self.assertIn("process_inventory_unverified", evaluate(row).reasons[-1])
+        self.assertIn("work_unknown:process_inventory_unverified", evaluate(row).reasons)
         self.assertFalse(evaluate(row).eligible)
 
     def test_undecodable_process_name_is_unknown(self):
@@ -85,6 +85,7 @@ class HostSafetyTests(unittest.TestCase):
              patch("isc.host_safety.read_gnome_inhibit_flags", return_value=CLEAR), \
              patch("isc.host_safety.read_process_candidates", return_value=EMPTY_SCAN), \
              patch("isc.host_safety.read_session_census", return_value=ONE_SESSION), \
+             patch("isc.host_safety.read_scheduled_work", return_value=None), \
              patch("subprocess.run", side_effect=AssertionError("power")):
             row = read_host_snapshot()
         self.assertEqual(row.user_idle_seconds, 1900)
