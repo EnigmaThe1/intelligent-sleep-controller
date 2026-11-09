@@ -101,7 +101,7 @@ class TrayController:
         self.title = self._label("ISC — OFF")
         self.receiver_label = self._label("Receiver: not advertised")
         self._separator()
-        self.off = Gtk.RadioMenuItem.new_with_label(None, "OFF — no automatic suspend")
+        self.off = Gtk.RadioMenuItem.new_with_label(None, "OFF — ISC automatic sleep disabled")
         self.monitor = Gtk.RadioMenuItem.new_with_label_from_widget(
             self.off, "MONITOR — observe only",
         )
