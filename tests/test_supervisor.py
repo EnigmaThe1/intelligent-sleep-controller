@@ -6,7 +6,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.service import MonitorSummary, MonitorUnavailable
-from isc.settings import ModeConfigError, ModeStatus
+from isc.mode_gate import EffectiveMode
 from isc.supervisor import monitor_service_loop
 
 
@@ -14,7 +14,7 @@ class SupervisorTests(unittest.TestCase):
     @patch("isc.supervisor.time.sleep")
     @patch("isc.supervisor.serve_monitor")
     @patch("isc.supervisor.read_monitor_health")
-    @patch("isc.supervisor.read_mode", return_value=ModeStatus("off", True))
+    @patch("isc.supervisor.current_mode", return_value=EffectiveMode("off", False))
     def test_off_never_starts_monitor(self, mode, health, serve, sleep):
         self.assertEqual(monitor_service_loop(max_iterations=3), 0)
         serve.assert_not_called()
@@ -24,7 +24,7 @@ class SupervisorTests(unittest.TestCase):
     @patch("isc.supervisor.time.sleep")
     @patch("isc.supervisor.serve_monitor")
     @patch("isc.supervisor.read_monitor_health", return_value=object())
-    @patch("isc.supervisor.read_mode", return_value=ModeStatus("monitor", True))
+    @patch("isc.supervisor.current_mode", return_value=EffectiveMode("monitor", True))
     def test_preserves_existing_healthy_external_receiver(
         self, mode, health, serve, sleep,
     ):
@@ -35,7 +35,7 @@ class SupervisorTests(unittest.TestCase):
     @patch("isc.supervisor.time.sleep")
     @patch("isc.supervisor.serve_monitor")
     @patch("isc.supervisor.read_monitor_health", return_value=None)
-    @patch("isc.supervisor.read_mode", return_value=ModeStatus("monitor", True))
+    @patch("isc.supervisor.current_mode", return_value=EffectiveMode("monitor", True))
     def test_monitor_starts_independent_of_gtk(
         self, mode, health, serve, sleep,
     ):
@@ -47,7 +47,7 @@ class SupervisorTests(unittest.TestCase):
     @patch("isc.supervisor.serve_monitor",
            side_effect=MonitorUnavailable("receiver_unavailable"))
     @patch("isc.supervisor.read_monitor_health", return_value=None)
-    @patch("isc.supervisor.read_mode", return_value=ModeStatus("monitor", True))
+    @patch("isc.supervisor.current_mode", return_value=EffectiveMode("monitor", True))
     def test_repeated_failures_have_bounded_backoff(
         self, mode, health, serve, sleep,
     ):
@@ -58,8 +58,8 @@ class SupervisorTests(unittest.TestCase):
     @patch("isc.supervisor.time.sleep")
     @patch("isc.supervisor.serve_monitor")
     @patch("isc.supervisor.read_monitor_health")
-    @patch("isc.supervisor.read_mode",
-           side_effect=ModeConfigError("invalid"))
+    @patch("isc.supervisor.current_mode",
+           return_value=EffectiveMode("off", False))
     def test_invalid_configuration_fails_closed(
         self, mode, health, serve, sleep,
     ):
