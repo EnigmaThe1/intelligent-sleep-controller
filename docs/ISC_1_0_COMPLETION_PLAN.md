@@ -197,6 +197,25 @@ actually changing the host's power settings. Full automatic ownership
 across boot, session exit and uninstall is still a Milestone 1 release gate.
 On a desktop with unstable resume, nothing here enables unattended sleep.
 
+### Milestone 3 — opt-in protected detached user jobs
+
+Added `isc protect-detached -- COMMAND [ARGS...]`, a practical operator-only
+path for **new** work that needs to survive closing its terminal. It starts a
+transient systemd **user** service via `systemd-run --collect --service-type=exec`
+with the established native `systemd-inhibit --what=idle:sleep --mode=block`
+wrapper. ISC does not install or modify existing timer/service units, and
+the new command does not run from the automatic sleep pipeline.
+
+Systemd's successful exec establishes that the wrapper started; it is not
+proof that the inhibitor remains held. ISC deliberately reports
+`service_started_inhibitor_unverified`. The job's arguments may appear in
+systemd metadata/journal, so sensitive parameters must not be supplied.
+Terminal environment is not automatically inherited by transient services.
+No completion of unrelated jobs is inferred; `coverage_complete=False`
+and `scheduled_work_safe=False` remain. Actual Ubuntu transient-unit
+acceptance is separate from synthetic tests and must not be confused with
+authorization to arm ON.
+
 ### Milestone 3 — systemd evidence used by the safety decision
 
 The shared `host_safety.compose_host_snapshot` and the operator-visible
