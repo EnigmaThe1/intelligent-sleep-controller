@@ -13,11 +13,13 @@ from .inhibitors import Inhibitor, read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState
 from .processes import ProcessScan, read_process_candidates
 from .session_census import SessionCensus, read_session_census
+from .scheduled_work import read_scheduled_work
+from .scheduled_safety import classify_scheduled_work
 
 
 def compose_host_snapshot(
     *, idle_ms: object, inhibitors: object, gnome_flags: object,
-    processes: object, sessions: object = None,
+    processes: object, sessions: object = None, scheduled: object = None,
 ) -> Snapshot:
     """Combine evidence, without mistaking partial observation for safety."""
     blockers: list[str] = []
@@ -53,6 +55,11 @@ def compose_host_snapshot(
         if processes.undecodable_names:
             jobs.append(WorkItem("process_names_unverified", WorkState.UNKNOWN))
 
+    # Reuse the existing systemd census. A running service might be a daemon
+    # or important unattended work; waiting timers require a wake policy.
+    # Neither source can authenticate the task owner or prove all jobs known.
+    jobs.extend(classify_scheduled_work(scheduled).work_items)
+
     idle_seconds = (
         idle_ms / 1000
         if type(idle_ms) is int and idle_ms >= 0 else None
@@ -76,6 +83,7 @@ def read_host_snapshot() -> Snapshot:
             gnome_flags=read_gnome_inhibit_flags(),
             processes=read_process_candidates(),
             sessions=read_session_census(),
+            scheduled=read_scheduled_work(),
         )
     except (OSError, ValueError, TypeError, RuntimeError):
         return Snapshot()
