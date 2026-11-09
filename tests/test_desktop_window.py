@@ -14,6 +14,7 @@ from isc.desktop_window import (
 from isc.receiver import MonitorHealth
 from isc.settings import ModeConfigError, ModeStatus
 from isc.keepawake import KeepAwakeError, KeepAwakeStatus
+from isc.native_controls import NativeControlError
 
 
 class DesktopWindowTests(unittest.TestCase):
@@ -205,6 +206,38 @@ class DesktopWindowTests(unittest.TestCase):
         controller.cancel_keep_awake()
         controller._message.assert_called_once()
         self.assertNotIn("private", str(controller._message.call_args))
+
+    @patch("isc.desktop_window.open_power_settings")
+    def test_system_power_settings_only_open_on_click(self, opener):
+        controller = object.__new__(DesktopWindow)
+        controller.open_system_power()
+        opener.assert_called_once_with()
+
+    @patch("isc.desktop_window.open_power_settings",
+           side_effect=NativeControlError("private system details"))
+    def test_settings_launch_failure_is_generic_and_does_not_leak(self, opener):
+        controller = object.__new__(DesktopWindow)
+        controller._message = Mock()
+        controller.open_system_power()
+        controller._message.assert_called_once()
+        self.assertIn("No settings were changed",
+                      str(controller._message.call_args))
+        self.assertNotIn("private system details",
+                         str(controller._message.call_args))
+
+    @patch("isc.desktop_window.open_power_settings",
+           side_effect=AssertionError("settings must not open automatically"))
+    @patch("isc.desktop_window.set_mode")
+    @patch("isc.desktop_window.read_mode", return_value=ModeStatus("off", True))
+    @patch("isc.desktop_window.read_monitor_health", return_value=None)
+    def test_changing_off_never_opens_gnome_settings(
+        self, health, mode, setter, opener,
+    ):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.set_monitor_mode("off")
+        setter.assert_called_once_with("off")
+        opener.assert_not_called()
 
     def test_window_shutdown_closes_owned_keepawake(self):
         controller = object.__new__(DesktopWindow)
