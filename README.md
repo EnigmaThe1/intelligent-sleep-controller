@@ -21,6 +21,35 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 
+## Protect an explicitly launched detached job
+
+For **new** background development jobs that must continue after the terminal
+closes, ISC can request a transient systemd *user* service running a native
+`systemd-inhibit` wrapper:
+
+```bash
+# Example only. Starts a background task, so do not run it merely for inspection.
+PYTHONPATH=src /usr/bin/python3 -m isc protect-detached -- /usr/bin/sleep 120
+```
+
+ISC reports the generated `isc-protected-*.service` unit name. The user
+service is temporary (`--collect`), with no installed unit files and no
+changes to other processes or system power settings. `systemd-run` waits
+for the inhibitor wrapper to be executed, but **cannot guarantee that the
+inhibitor was acquired and remains held**. Inspect its status with
+`systemctl --user status UNIT_NAME` and the existing read-only
+`isc inhibitors` command before relying on its protection. This workflow
+is optional and does **not** make ordinary detached processes or unrelated
+scheduled tasks safe to suspend.
+
+**Privacy and lifecycle:** Command arguments can be visible in systemd unit
+properties and the user journal. Do not pass passwords, tokens or confidential
+arguments. Unlike `isc protect --`, a transient user service does not
+inherit your whole terminal environment; explicitly arrange a safe environment
+for any application that needs one. The job may stop if your user service
+manager exits on logout. This is not a durable wake scheduler, and no
+existing timers/services are automatically modified.
+
 ## Protect a foreground development task
 
 ISC can use Linux's existing `systemd-inhibit` to keep the machine awake
