@@ -46,6 +46,9 @@ class BindingSummary:
     unknown: int
     observed_at: float | None
     coverage_verified: bool = False
+    # A point-in-time procfs sample does not observe every intervening event.
+    sampling_gap_seconds: float | None = None
+    interval_coverage_verified: bool = False
 
 
 def _valid_identity(identity: ProcessIdentity) -> bool:
@@ -65,6 +68,7 @@ class TaskProcessBindings:
         self._tasks: dict[tuple[str, str], BoundTask] = {}
         self._history_lost = False
         self._last_scan: float | None = None
+        self._sampling_gap: float | None = None
         self._latest_visible = 0
         self._latest_missing = 0
         self._latest_children = 0
@@ -102,6 +106,10 @@ class TaskProcessBindings:
         if (type(now) not in (int, float)
                 or not math.isfinite(now) or now < 0):
             raise ValueError("invalid_observation_time")
+        self._sampling_gap = (
+            float(now) - self._last_scan if self._last_scan is not None
+            and now >= self._last_scan else None
+        )
         if self._last_scan is not None:
             # A missed interval can conceal children spawning and detaching.
             # Retain UNKNOWN even if the root remains visible afterward.
@@ -200,6 +208,8 @@ class TaskProcessBindings:
                 + int(self._history_lost)
             ),
             observed_at=self._last_scan,
+            sampling_gap_seconds=self._sampling_gap,
+            interval_coverage_verified=False,
         )
 
     @property
