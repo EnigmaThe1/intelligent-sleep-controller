@@ -384,6 +384,51 @@ class NativeWorkSupervisor:
             unknown=uncertain, observed_at=self._last_time,
         )
 
+    def fresh_states(self, *, now: float) -> tuple[WorkState, ...]:
+        """Time-aware, fail-closed observations for any future policy consumer.
+
+        The legacy states() method describes the last sampled snapshot. That
+        is not enough for a decision made later: after the sampler stops,
+        previously observed ACTIVE processes could become stale. Never
+        interpret old evidence, clock reversals, missing native enrollment,
+        or absent membership rechecks as proof of safe idleness.
+
+        These are only ACTIVE/UNKNOWN observations, not task authority, and
+        this method is deliberately disconnected from suspend controls.
+        """
+        if (type(now) not in (int, float) or not math.isfinite(now)
+                or now < 0):
+            raise ValueError("invalid_fresh_supervision_time")
+        if not self._scopes:
+            return (WorkState.UNKNOWN,)
+        if (self._last_time is None
+                or now < self._last_time
+                or now - self._last_time > 60.0
+                or self._bindings.history_lost):
+            return (WorkState.UNKNOWN,) * len(self._scopes)
+        states = self.states()
+        return tuple(
+            state if (
+                key in self._native_pins
+                and key in self._observed_keys
+                and key not in self._sticky_unknown
+                and state is WorkState.ACTIVE
+            ) else WorkState.UNKNOWN
+            for key, state in zip(self._scopes, states)
+        )
+
+    def fresh_summary(self, *, now: float) -> SupervisionSummary:
+        """Public aggregate of freshly observed native work; never coverage."""
+        states = self.fresh_states(now=now)
+        if not self._scopes:
+            return SupervisionSummary(0, 0, 0, self._last_time)
+        return SupervisionSummary(
+            registered=len(self._scopes),
+            observed_members=sum(state is WorkState.ACTIVE for state in states),
+            unknown=sum(state is WorkState.UNKNOWN for state in states),
+            observed_at=self._last_time,
+        )
+
     def states(self) -> tuple[WorkState, ...]:
         """Busy evidence or UNKNOWN only. Never READY or COMPLETED."""
         if self._bindings.history_lost:
