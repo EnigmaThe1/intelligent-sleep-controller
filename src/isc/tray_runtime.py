@@ -14,6 +14,8 @@ import subprocess
 import sys
 
 from .receiver import discover_monitor_socket
+from .mode_gate import resolve_mode
+from .settings import ModeStatus
 
 
 class TrayMonitorProcess:
@@ -61,10 +63,11 @@ class TrayMonitorProcess:
         Does not restart an unexpectedly crashed child: avoids crash loops.
         An already-existing monitor is left untouched and reported separately.
         """
-        if not config_valid or mode != "monitor":
+        effective = resolve_mode(ModeStatus(mode, config_valid)) if config_valid else resolve_mode(None)
+        if not effective.monitor_allowed:
             self.stop()
             self._failed = False
-            return "invalid_configuration" if not config_valid else "off"
+            return "invalid_configuration" if not effective.configuration_valid else "off"
 
         if self._child is not None:
             if self._child.poll() is not None:
