@@ -22,6 +22,7 @@ from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfigur
 from .hook_install import HookInstallError, modify_existing_hooks
 from .inhibitors import read_inhibitors
 from .policy import Snapshot, WorkItem, WorkState, evaluate
+from .host_safety import compose_host_snapshot
 from .processes import read_process_candidates
 from .process_lifecycle import read_process_lineage, compare_process_lineage
 from .receiver import LocalMonitor, send_observation, send_discovered_observation, read_monitor_health
@@ -316,46 +317,12 @@ def check() -> int:
     gnome_flags = read_gnome_inhibit_flags()
     session_census = read_session_census()
     scan = read_process_candidates()
-    blockers: tuple[str, ...]
-    if locks is None:
-        blockers = ("logind_inhibitors_unverified",)
-    else:
-        blockers = tuple(
-            f"logind_blocker_{index}"
-            for index, lock in enumerate(locks)
-            if lock.blocks_automatic_sleep
-        )
-
-    # GNOME is one session only. Missing flags must NOT be treated as clear.
-    # Even both flags FALSE cannot establish all-session inhibitor coverage.
-    gnome_blockers = tuple(
-        name for name, inhibited in (
-            ("gnome_suspend_unverified_or_inhibited", gnome_flags.suspend_inhibited),
-            ("gnome_idle_unverified_or_inhibited", gnome_flags.idle_inhibited),
-        ) if inhibited is not False
-    )
-    blockers += gnome_blockers
-
-    # There is not yet an authoritative supervisor or timer/wake verifier.
-    # Both must remain False even when no running jobs are discovered.
-    result = evaluate(
-        Snapshot(
-            user_idle_seconds=(idle_ms / 1000) if idle_ms is not None else None,
-            threshold_seconds=1800,
-            active_sleep_inhibitors=blockers,
-            coverage_complete=False,
-            scheduled_work_safe=False,
-            work_items=tuple(
-                WorkItem(
-                    identifier=f"process_candidate_{index}",
-                    state=WorkState.UNKNOWN,
-                )
-                for index, _candidate in enumerate(
-                    (scan.candidates if scan is not None else ()), start=1
-                )
-            ),
-        )
-    )
+    # Share the identical conservative source composition with the
+    # disarmed auto-suspend executor. Source availability is not authority.
+    result = evaluate(compose_host_snapshot(
+        idle_ms=idle_ms, inhibitors=locks, gnome_flags=gnome_flags,
+        processes=scan, sessions=session_census,
+    ))
     print("ISC READ-ONLY SAFETY CHECK")
     print(f"GNOME idle: {_format_idle_ms(idle_ms)}")
     print("Idle threshold: 1800 seconds")
