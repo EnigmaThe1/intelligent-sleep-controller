@@ -11,6 +11,9 @@ from typing import Sequence
 
 from . import __version__
 from .gnome import read_gnome_idle_ms
+from .gnome_policy import (
+    GnomePolicyError, inspect_gnome_policy, change_gnome_policy,
+)
 from .gnome_inhibitors import read_gnome_inhibit_flags
 from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_diagnostics import check_hook_delivery
@@ -761,6 +764,43 @@ def keep_awake_cli(minutes: int | None, forever: bool = False) -> int:
             print("WARNING: could not verify inhibitor cancellation.")
 
 
+def gnome_policy_cli(operation: str | None, confirmed: bool) -> int:
+    """Show or explicitly apply/restore reversible GNOME idle sleep policy."""
+    print("ISC GNOME AUTOMATIC SLEEP COORDINATION")
+    try:
+        if operation is None:
+            policy = inspect_gnome_policy()
+        elif not confirmed:
+            print("No GNOME settings changed. --confirm is required.")
+            print("Disable affects both AC and battery idle-suspend timeouts.")
+            print("Restore returns them to the previously saved values.")
+            return 2
+        else:
+            policy = change_gnome_policy(operation, confirmed=True)
+    except GnomePolicyError as exc:
+        print("GNOME operation refused: " + str(exc))
+        print("A private recovery record is retained if changes were incomplete.")
+        return 2
+    print("GNOME AC idle timeout: " + (
+        str(policy.ac_timeout) + " seconds"
+        if policy.ac_timeout is not None else "UNKNOWN"
+    ))
+    print("GNOME battery idle timeout: " + (
+        str(policy.battery_timeout) + " seconds"
+        if policy.battery_timeout is not None else "UNKNOWN"
+    ))
+    print("ISC-managed backup: " + ("YES" if policy.managed else "NO"))
+    print("Coordination state: " + policy.reason)
+    if operation is None:
+        print("PREVIEW ONLY. No GNOME settings changed.")
+        print("Explicit disable: isc gnome-policy --power-policy disable --confirm")
+        print("Explicit restore: isc gnome-policy --power-policy restore --confirm")
+    else:
+        print("Operator-confirmed GNOME power policy request processed.")
+    print("ISC automatic ON remains unavailable.")
+    return 0 if not policy.conflict else 2
+
+
 def native_sleep_cli(action: str, confirmed: bool) -> int:
     assessment = assess_native_sleep(action)
     print(f"ISC NATIVE {action.upper()} PREVIEW")
@@ -1172,7 +1212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "hook-wiring", "agent-diagnose", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "hook-wiring", "agent-diagnose", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window", "gnome-policy"),
         default="status",
     )
     parser.add_argument(
@@ -1191,8 +1231,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--minutes", type=int, choices=PRESETS_MINUTES, help="Keep Awake duration in minutes")
     parser.add_argument("--forever", action="store_true", help="Keep Awake until cancelled while this terminal is running")
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
+    parser.add_argument(
+        "--power-policy", choices=("disable", "restore"),
+        help="GNOME idle-suspend timeout coordination (gnome-policy only)",
+    )
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
     args = parser.parse_args(incoming)
+    if args.command == "gnome-policy":
+        return gnome_policy_cli(args.power_policy, args.confirm)
+    if args.power_policy is not None:
+        parser.error("--power-policy is only valid with gnome-policy")
     if args.command == "app":
         if args.install and args.uninstall:
             parser.error("choose either --install or --uninstall")
