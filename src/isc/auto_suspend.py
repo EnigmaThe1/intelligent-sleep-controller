@@ -14,8 +14,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from .manual_power import ManualSuspendResult, _submit_after_preflight
-from .auto_native import AutoNativeAssessment, assess_auto_native_suspend
+from .auto_native import (
+    AutoNativeAssessment, AutoNativeSubmitResult, assess_auto_native_suspend,
+    submit_automatic_native,
+)
 from .mode_gate import EffectiveMode, current_mode
 from .policy import Snapshot, evaluate
 from .host_safety import read_host_snapshot
@@ -41,7 +43,7 @@ def attempt_automatic_suspend(
     snapshot_reader: Callable[[], Snapshot] | None = read_host_snapshot,
     mode_reader: Callable[[], EffectiveMode] = current_mode,
     native_preflight: Callable[[], AutoNativeAssessment] = assess_auto_native_suspend,
-    submit: Callable[[], ManualSuspendResult] = _submit_after_preflight,
+    submit: Callable[[], AutoNativeSubmitResult] = submit_automatic_native,
 ) -> AutomaticSuspendResult:
     """One guarded auto request. Never schedules itself or enables ON.
 
@@ -95,7 +97,7 @@ def attempt_automatic_suspend(
     except (OSError, RuntimeError, ValueError, TypeError):
         return AutomaticSuspendResult(False, "safety_source_unavailable")
 
-    if not isinstance(response, ManualSuspendResult):
+    if not isinstance(response, AutoNativeSubmitResult):
         return AutomaticSuspendResult(False, "native_request_unverified")
     if response.submitted is True:
         return AutomaticSuspendResult(True, "request_accepted_by_systemd")
