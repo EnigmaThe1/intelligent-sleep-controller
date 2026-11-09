@@ -77,6 +77,19 @@ class BracketedSignalTests(unittest.TestCase):
         self.assertIsNone(result.observed_candidates)
         self.assertFalse(result.coverage_verified)
 
+    def test_quiet_window_with_owner_change_is_not_healthy(self):
+        result = inspect_bracketed_user_manager_signal(
+            owner_reader=owners(":1.12", ":1.13"),
+            watcher=lambda **kw: LiveSignalProbe("QUIET_UNVERIFIED"))
+        self.assertEqual(result.status, "OWNER_CHANGED_UNVERIFIED")
+        self.assertFalse(result.manager_sender_correlated)
+
+    def test_quiet_window_with_missing_owner_is_unknown(self):
+        result = inspect_bracketed_user_manager_signal(
+            owner_reader=owners(":1.12", None),
+            watcher=lambda **kw: LiveSignalProbe("QUIET_UNVERIFIED"))
+        self.assertEqual(result.status, "UNKNOWN")
+
     def test_malformed_quiet_with_sender_is_unknown(self):
         def watcher(**kw):
             kw["_sender_callback"](":1.12")
