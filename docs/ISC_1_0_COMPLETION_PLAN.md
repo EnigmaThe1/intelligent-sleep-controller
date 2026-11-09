@@ -64,6 +64,28 @@ suspend can safely be enabled after four commits. A failed acceptance gate
 remains a blocker, not a reason to conceal the unknown. No suspend/wake
 action is performed as part of continuous integration.
 
-**Immediate next code task:** a single safe ON-mode eligibility contract,
-initially disarmed, with tests for persistent OFF/MONITOR, mode changes,
-unknown workloads, failed inhibitor checks and stale decision data.
+## Delivery progress (2026-11-09)
+
+- **Milestone 1 — core-mode consolidation:** shared `mode_gate.py` now
+  governs the systemd user supervisor, foreground MONITOR receiver, tray
+  runtime and tray status. OFF/MONITOR remain persistent and invalid ON
+  preferences stop monitoring without requesting power actions. Keep Awake
+  remains independent. Core integration is implemented; full desktop/boot
+  acceptance and conflicting GNOME auto-suspend settings still require
+  release validation.
+- **Milestone 2 — guarded execution path:** `auto_suspend.py` now contains
+  a real one-shot native-request decision flow: persistently armed ON
+  state, a trusted complete policy snapshot, native capability/inhibitor
+  preflight, a second safety snapshot, final unchanged mode check and
+  guarded native submission. Tests use injected synthetic evidence and
+  a fake submission; **no actual suspend occurs in CI**.
+- **Still disarmed:** the shipped `mode_gate.py` explicitly refuses ON;
+  `manual_power.assess_manual_suspend()` explicitly does not verify
+  workload coverage; the real snapshot provider is not yet trusted.
+  Releasing ON requires Milestone 3 workload evidence, race-safe mode
+  transitions and Milestone 4 hardware wake verification. No one should
+  interpret the new execution code as permission to auto-suspend.
+
+**Next delivery task:** finish the minimal trusted workload/wake evidence
+needed to satisfy the guarded executor on an ordinary idle machine,
+without weakening unknown-work safety or adding another monitoring system.
