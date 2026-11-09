@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import stat
 import sys
+import threading
+import time
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -11,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.settings import (
     CONFIG_FILE, PROJECT_DIR, ModeConfigError, read_mode, set_mode,
+    mode_dispatch_guard,
 )
 
 
@@ -123,6 +126,79 @@ class ModeTests(unittest.TestCase):
         self.root.chmod(0o775)
         with self.assertRaises(ModeConfigError):
             set_mode("monitor", config_root=self.root)
+
+    def test_missing_dispatch_lock_fails_without_writing(self):
+        with self.assertRaises(ModeConfigError):
+            with mode_dispatch_guard(config_root=self.root):
+                self.fail("Unconfigured system must not be authorized")
+        self.assertFalse(self.root.exists())
+
+    def test_dispatch_guard_reads_actual_locked_mode(self):
+        set_mode("monitor", config_root=self.root)
+        with mode_dispatch_guard(config_root=self.root) as state:
+            self.assertEqual(state.mode, "monitor")
+            self.assertTrue(state.configured)
+
+    def test_concurrent_dispatch_refuses_immediately(self):
+        set_mode("monitor", config_root=self.root)
+        with mode_dispatch_guard(config_root=self.root):
+            with self.assertRaisesRegex(ModeConfigError, "mode_dispatch_busy"):
+                with mode_dispatch_guard(config_root=self.root):
+                    self.fail("Second dispatch must never race")
+
+    def test_off_update_serializes_with_dispatch_lock(self):
+        set_mode("monitor", config_root=self.root)
+        entered = threading.Event()
+        completed = threading.Event()
+        failures = []
+
+        def change_to_off():
+            entered.set()
+            try:
+                set_mode("off", config_root=self.root)
+            except Exception as error:
+                failures.append(error)
+            finally:
+                completed.set()
+
+        worker = threading.Thread(target=change_to_off, daemon=True)
+        with mode_dispatch_guard(config_root=self.root):
+            worker.start()
+            self.assertTrue(entered.wait(timeout=1))
+            time.sleep(0.03)
+            self.assertFalse(completed.is_set(),
+                             "Mode update cannot commit during dispatch")
+            self.assertEqual(read_mode(config_root=self.root).mode, "monitor")
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(failures, [])
+        self.assertTrue(completed.is_set())
+        self.assertEqual(read_mode(config_root=self.root).mode, "off")
+
+    def test_dispatch_guard_rejects_symlinked_lock(self):
+        set_mode("monitor", config_root=self.root)
+        lock = self.directory / ".settings.lock"
+        real = self.directory / "actual-lock"
+        lock.rename(real)
+        lock.symlink_to(real)
+        with self.assertRaises(ModeConfigError):
+            with mode_dispatch_guard(config_root=self.root):
+                self.fail("Must not follow link to lock")
+
+    def test_dispatch_guard_rejects_unsafe_lock_permissions(self):
+        set_mode("monitor", config_root=self.root)
+        lock = self.directory / ".settings.lock"
+        lock.chmod(0o666)
+        with self.assertRaisesRegex(ModeConfigError, "unsafe_mode_dispatch_lock"):
+            with mode_dispatch_guard(config_root=self.root):
+                self.fail("Unsafe lock must not grant permission")
+
+    def test_dispatch_guard_raises_for_invalid_mode_file(self):
+        set_mode("monitor", config_root=self.root)
+        self.file.write_text("{invalid")
+        with self.assertRaises(ModeConfigError):
+            with mode_dispatch_guard(config_root=self.root):
+                self.fail("Corrupt settings must not dispatch")
 
     def test_does_not_invoke_power_management(self):
         with patch("subprocess.run", side_effect=AssertionError("power action")):
