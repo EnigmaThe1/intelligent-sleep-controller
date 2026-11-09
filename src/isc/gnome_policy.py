@@ -160,6 +160,12 @@ def _save_backup(path: Path, original: tuple[int, int]) -> None:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
+        # Make the new directory entry durable *before* changing GNOME.
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except OSError:
         # Keep the recovery record if its creation was interrupted.
         raise GnomePolicyError("gnome_backup_write_failed") from None
@@ -214,7 +220,10 @@ def change_gnome_policy(
         with _exclusive(config_root) as path:
             saved = _read_backup(path)
             current = tuple(_read_timeout(key) for key in _KEYS)
-            if any(value is None for value in current):
+            if any(
+                type(value) is not int or not 0 <= value < 2**32
+                for value in current
+            ):
                 raise GnomePolicyError("gnome_policy_unverified")
 
             if operation == "disable":
