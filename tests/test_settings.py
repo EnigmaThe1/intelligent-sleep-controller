@@ -12,7 +12,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.settings import (
-    CONFIG_FILE, PROJECT_DIR, ModeConfigError, read_mode, set_mode,
+    CONFIG_FILE, PROJECT_DIR, ModeConfigError, ModeStatus, read_mode, set_mode,
     mode_dispatch_guard,
 )
 
@@ -132,6 +132,25 @@ class ModeTests(unittest.TestCase):
             with mode_dispatch_guard(config_root=self.root):
                 self.fail("Unconfigured system must not be authorized")
         self.assertFalse(self.root.exists())
+
+    def test_stale_idempotent_off_observation_never_loses_off(self):
+        # Simulate observing OFF before acquiring the writer lock, while
+        # another process has since selected MONITOR.
+        set_mode("monitor", config_root=self.root)
+        actual_reader = read_mode
+        reads = [0]
+
+        def stale_first_read(*, config_root=None):
+            reads[0] += 1
+            if reads[0] == 1:
+                return ModeStatus("off", True)
+            return actual_reader(config_root=config_root)
+
+        with patch("isc.settings.read_mode", side_effect=stale_first_read):
+            outcome = set_mode("off", config_root=self.root)
+        self.assertEqual(outcome.mode, "off")
+        self.assertEqual(read_mode(config_root=self.root).mode, "off")
+        self.assertGreaterEqual(reads[0], 2)
 
     def test_dispatch_guard_reads_actual_locked_mode(self):
         set_mode("monitor", config_root=self.root)
