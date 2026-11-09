@@ -15,6 +15,7 @@ from .receiver import read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
 from .mode_gate import resolve_mode
 from .keepawake import KeepAwakeError, KeepAwakeManager
+from .native_controls import NativeControlError, open_power_settings
 from .tray import backend_probe
 
 
@@ -58,7 +59,7 @@ class DesktopWindow:
         self.GLib = GLib
         self._awake = KeepAwakeManager()
         self.window = Gtk.Window(title="Intelligent Sleep Controller")
-        self.window.set_default_size(650, 365)
+        self.window.set_default_size(650, 425)
         self.window.set_border_width(20)
         self.window.connect("destroy", self._close_window)
 
@@ -71,7 +72,8 @@ class DesktopWindow:
 
         intro = Gtk.Label(
             label="Local monitoring and manual controls. "
-                  "Automatic suspension is not implemented."
+                  "ISC automatic suspension is unavailable. "
+                  "GNOME has separate automatic sleep settings."
         )
         intro.set_xalign(0)
         intro.set_line_wrap(True)
@@ -109,6 +111,17 @@ class DesktopWindow:
             button = Gtk.Button(label=label)
             button.connect("clicked", callback)
             awake_buttons.pack_start(button, False, False, 0)
+
+        power_help = Gtk.Label(
+            label="OFF disables ISC automatic sleep only. "
+                  "GNOME automatic sleep is managed separately."
+        )
+        power_help.set_xalign(0)
+        power_help.set_line_wrap(True)
+        content.pack_start(power_help, False, False, 0)
+        settings = Gtk.Button(label="Open GNOME Power Settings")
+        settings.connect("clicked", lambda *_: self.open_system_power())
+        content.pack_start(settings, False, False, 0)
         self.refresh()
         GLib.timeout_add_seconds(5, self.refresh)
         self.window.show_all()
@@ -178,6 +191,17 @@ class DesktopWindow:
         except KeepAwakeError:
             print("ISC Keep Awake cancellation unverified.")
         self.Gtk.main_quit()
+
+    def open_system_power(self) -> None:
+        """Operator-clicked GNOME control center; does not change settings."""
+        try:
+            open_power_settings()
+        except NativeControlError:
+            self._message(
+                "GNOME Power Settings unavailable",
+                "Could not open GNOME Power Settings. No settings were changed.",
+                error=True,
+            )
 
     def start_tray(self) -> None:
         issues = backend_probe()
