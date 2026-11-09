@@ -257,6 +257,17 @@ running tray-managed monitor: IPC ownership ensures only one receives events.
 **Native user-service installation is a change to desktop startup behaviour**
 and should be explicitly approved and checked on the actual machine.
 
+### Keep Awake in the main desktop window
+
+The GNOME Show Apps window now offers **Keep Awake 30 min**,
+**Keep Awake until cancelled**, and **Cancel Keep Awake**, with the
+verified native inhibitor status displayed in the same window.
+This works even without the optional tray indicator. Closing the
+window releases its own inhibitor; it never cancels a separate
+tray-owned or terminal-owned inhibitor. An inhibitor is started only
+after the operator clicks a Keep Awake control. Automatic ON remains
+unavailable.
+
 ### Timed Keep Awake (explicit, cancellable, no daemon)
 
 The ISC tray now offers **Keep Awake** presets of **15, 30, 60, 120 or
