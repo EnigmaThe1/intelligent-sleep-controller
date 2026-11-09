@@ -124,6 +124,21 @@ No native readiness result grants workload coverage or wake-safety
 authority. Hardware sleep/wake validation and scheduler coverage
 remain release blockers.
 
+### Dedicated final automatic submission
+
+The automatic executor no longer calls the human-confirmed manual suspend
+submission helper. A dedicated `submit_automatic_native()` performs a
+last-moment check of the **real saved mode** (not test-injected modes),
+existing complete host snapshot and native logind inhibitors before issuing
+the fixed, inhibitor-respecting systemd command. A second mode and workload
+check aborts if the operator changes settings or work resumes. This function
+is not exposed as a user command and ON remains unavailable.
+
+The release is **not armed**: trustworthy comprehensive scheduler/workload
+coverage, atomic OFF transitions at the suspend decision boundary, and
+verified hardware resume behaviour are still required. A positive native
+capability check is necessary but insufficient.
+
 **Next delivery task:** finish the minimal trusted workload/wake evidence
 needed to satisfy the guarded executor on an ordinary idle machine,
 without weakening unknown-work safety or adding another monitoring system.
