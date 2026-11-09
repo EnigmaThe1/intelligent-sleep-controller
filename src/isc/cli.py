@@ -1167,7 +1167,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
-        description="Read-only foundation for future intelligent Linux sleep management",
+        description="ISC Linux sleep controls (automatic suspend not enabled)",
+        epilog="Protect a foreground task: isc protect -- COMMAND [ARGS...]",
     )
     parser.add_argument(
         "command", nargs="?",
