@@ -39,6 +39,7 @@
 - [x] Passive `isc agent-diagnose --source claude_code|codex` reconciles current hook wiring and live source counters without executing an agent; fully configured sessions with zero events are explicitly QUIET/READY rather than broken, while receiver or config loss is UNKNOWN. Sender claims never authenticate app identity or completion.
 - [x] Read-only `isc hook-wiring --source claude_code|codex` audits ISC-owned hook commands, local dependency presence, missing/conditional event groups and duplicate handlers without execution, path disclosure or configuration changes; installed hooks remain unauthenticated and live delivery unverified.
 - [x] Step 97: evaluate native systemd/journal/cgroup event facilities and add bounded, pure journal-envelope checks (diagnostic only; no live listener or completion inference)
+- [x] Step 98: add bounded pure signal-stream model with sticky UNKNOWN on disconnects, clock errors, long gaps, invalid signals and event overflow (no live subscription)
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
