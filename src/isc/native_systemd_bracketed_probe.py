@@ -69,6 +69,11 @@ def inspect_bracketed_user_manager_signal(
     if observation.state == "QUIET_UNVERIFIED":
         if observation.candidate_events is not None or sender is not None:
             return unknown
+        # Silence cannot hide a changed or unavailable manager owner.
+        if after is None:
+            return unknown
+        if before != after:
+            return BracketedSignalSummary("OWNER_CHANGED_UNVERIFIED")
         return BracketedSignalSummary("QUIET_UNVERIFIED")
 
     if observation.state != "CANDIDATE_SIGNAL_UNVERIFIED":
