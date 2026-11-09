@@ -139,6 +139,26 @@ coverage, atomic OFF transitions at the suspend decision boundary, and
 verified hardware resume behaviour are still required. A positive native
 capability check is necessary but insufficient.
 
+### Milestone 3 — practical protected-work command
+
+Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
+wrapper around the existing Linux `systemd-inhibit` mechanism. When
+used to launch a foreground build or AI command, the kernel inhibitor
+blocks idle/sleep requests for the duration of that command and is
+released when the native wrapper exits. This is a **working protection
+feature**, not another event monitor or scheduler. The command is
+executed without a shell; ISC does not log arguments or alter persistent
+modes, GNOME settings or system services.
+
+**Boundary:** tasks that detach from the launched command or jobs not
+started through `isc protect` are **not** covered by that inhibitor
+once the foreground process exits. Existing independently scheduled
+jobs, other sessions and incomplete inventories remain UNKNOWN and must
+continue to prevent automatic sleep. This opt-in tool does not on its
+own justify enabling ON.
+
+No automatic suspend is enabled by implementing this command.
+
 **Next delivery task:** finish the minimal trusted workload/wake evidence
 needed to satisfy the guarded executor on an ordinary idle machine,
 without weakening unknown-work safety or adding another monitoring system.
