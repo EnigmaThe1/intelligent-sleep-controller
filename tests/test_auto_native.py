@@ -1,6 +1,9 @@
 """ISC 1.0 automatic native preflight: read only, fail closed."""
 from pathlib import Path
+from contextlib import contextmanager
+from tempfile import TemporaryDirectory
 import sys
+import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
@@ -9,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from isc.auto_native import (AutoNativeAssessment, AutoNativeSubmitResult,
                              assess_auto_native_suspend, submit_automatic_native)
 from isc.mode_gate import EffectiveMode
+from isc.settings import ModeStatus, mode_dispatch_guard, set_mode
 from isc.policy import Snapshot, WorkItem, WorkState
 from isc.inhibitors import Inhibitor
 
@@ -114,7 +118,29 @@ def _safe_policy():
                     scheduled_work_safe=True)
 
 
+@contextmanager
+def _synthetic_armed_guard():
+    """ONLY for unit tests that mock the native power call."""
+    yield ModeStatus("on", True)
+
+
+@contextmanager
+def _synthetic_off_guard():
+    yield ModeStatus("off", True)
+
+
 class AutomaticNativeSubmissionTests(unittest.TestCase):
+    def setUp(self):
+        # Simulate the eventual ON schema in tests only. Production settings
+        # and the real dispatch guard still reject ON.
+        self.guard_patch = patch(
+            "isc.auto_native.mode_dispatch_guard",
+            side_effect=_synthetic_armed_guard,
+        )
+        self.guard_patch.start()
+        self.addCleanup(self.guard_patch.stop)
+
+
     @patch("isc.auto_native.subprocess.run")
     @patch("isc.auto_native.assess_auto_native_suspend")
     @patch("isc.auto_native.read_host_snapshot")
@@ -207,7 +233,7 @@ class AutomaticNativeSubmissionTests(unittest.TestCase):
         self.assertTrue(row.submitted)
         run.assert_called_once_with(
             ("systemctl", "--check-inhibitors=yes", "suspend"),
-            capture_output=True, text=True, check=False, timeout=20)
+            capture_output=True, text=True, check=False, timeout=3)
         self.assertEqual(host.call_count, 2)
         self.assertEqual(mode.call_count, 2)
 
@@ -236,6 +262,71 @@ class AutomaticNativeSubmissionTests(unittest.TestCase):
         self.assertEqual(submit_automatic_native().reason,
                          "native_suspend_unavailable")
         run.assert_not_called()
+
+
+    @patch("isc.auto_native.current_mode", return_value=_armed_mode())
+    @patch("isc.auto_native.subprocess.run")
+    @patch("isc.auto_native.assess_auto_native_suspend",
+           return_value=AutoNativeAssessment(True, "yes", ()))
+    @patch("isc.auto_native.read_host_snapshot", return_value=_safe_policy())
+    def test_locked_persistent_off_blocks_forged_on(self, host, native, run, mode):
+        with patch("isc.auto_native.mode_dispatch_guard",
+                   side_effect=_synthetic_off_guard):
+            result = submit_automatic_native()
+        self.assertEqual(result.reason, "operator_mode_changed")
+        run.assert_not_called()
+
+    @patch("isc.auto_native.current_mode", return_value=_armed_mode())
+    @patch("isc.auto_native.subprocess.run")
+    @patch("isc.auto_native.assess_auto_native_suspend",
+           return_value=AutoNativeAssessment(True, "yes", ()))
+    @patch("isc.auto_native.read_host_snapshot", return_value=_safe_policy())
+    def test_real_guard_reads_off_even_with_injected_on(self, host, native, run, mode):
+        with TemporaryDirectory() as root:
+            from pathlib import Path
+            set_mode("off", config_root=Path(root))
+            with patch("isc.auto_native.mode_dispatch_guard",
+                       side_effect=lambda: mode_dispatch_guard(config_root=Path(root))):
+                result = submit_automatic_native()
+        self.assertEqual(result.reason, "operator_mode_changed")
+        run.assert_not_called()
+
+    @patch("isc.auto_native.current_mode", return_value=_armed_mode())
+    @patch("isc.auto_native.subprocess.run")
+    @patch("isc.auto_native.assess_auto_native_suspend",
+           return_value=AutoNativeAssessment(True, "yes", ()))
+    @patch("isc.auto_native.read_host_snapshot", return_value=_safe_policy())
+    def test_busy_dispatch_lock_fails_closed(self, host, native, run, mode):
+        from isc.settings import ModeConfigError
+        with patch("isc.auto_native.mode_dispatch_guard",
+                   side_effect=ModeConfigError("mode_dispatch_busy")):
+            result = submit_automatic_native()
+        self.assertFalse(result.submitted)
+        run.assert_not_called()
+
+    @patch("isc.auto_native.current_mode", return_value=_armed_mode())
+    @patch("isc.auto_native.subprocess.run")
+    @patch("isc.auto_native.assess_auto_native_suspend",
+           return_value=AutoNativeAssessment(True, "yes", ()))
+    @patch("isc.auto_native.read_host_snapshot", return_value=_safe_policy())
+    def test_stale_pre_dispatch_sample_refuses(self, host, native, run, mode):
+        with patch("isc.auto_native.time.monotonic", side_effect=[10.0, 12.0]):
+            result = submit_automatic_native()
+        self.assertEqual(result.reason, "last_snapshot_stale")
+        run.assert_not_called()
+
+    @patch("isc.auto_native.current_mode", return_value=_armed_mode())
+    @patch("isc.auto_native.subprocess.run",
+           side_effect=subprocess.TimeoutExpired("systemctl", 3))
+    @patch("isc.auto_native.assess_auto_native_suspend",
+           return_value=AutoNativeAssessment(True, "yes", ()))
+    @patch("isc.auto_native.read_host_snapshot", return_value=_safe_policy())
+    def test_native_timeout_is_outcome_unknown_not_rejected(
+        self, host, native, run, mode,
+    ):
+        result = submit_automatic_native()
+        self.assertFalse(result.submitted)
+        self.assertEqual(result.reason, "native_suspend_outcome_unknown")
 
 
 if __name__ == "__main__":
