@@ -29,7 +29,7 @@ _HEADER = re.compile(
     rb"Interface=org\.freedesktop\.systemd1\.Manager[ \t]+"
     rb"Member=(JobNew|JobRemoved|UnitNew|UnitRemoved)[ \t]*(?:\r?\n)"
 )
-_BANNER = b"Monitoring bus message stream.\\n"
+_BANNER = b"Monitoring bus message stream.\n"
 _MAX_BYTES = 16384
 
 
