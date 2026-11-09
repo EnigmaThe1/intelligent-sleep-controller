@@ -21,6 +21,26 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 
+## Protect a foreground development task
+
+ISC can use Linux's existing `systemd-inhibit` to keep the machine awake
+for a command launched explicitly through ISC:
+
+```bash
+PYTHONPATH=src python3 -m isc protect -- make -j4
+```
+
+This runs `make -j4` normally, with a native idle/sleep inhibitor held
+until the launched foreground command exits. It uses no shell, background
+daemon, monitoring service, network connection, credentials, or persistent
+settings change. You can pass any command and arguments after `--`.
+
+**Important:** This protects only work tied to the command's lifetime.
+Jobs detached from that process, pre-existing agent jobs and independent
+scheduled tasks are not covered after it exits. They remain unverified
+and must still block ISC's automatic sleep decision. ISC ON remains
+disarmed pending the release safety and hardware gates.
+
 ## Try the foundation (non-invasive)
 
 Requires Python 3.10+; no third-party runtime packages:
