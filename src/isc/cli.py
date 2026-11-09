@@ -16,6 +16,7 @@ from .hook_payload import read_hook_payload, SUPPORTED_SOURCES
 from .hook_diagnostics import check_hook_delivery
 from .hook_watch import watch_hook_observations
 from .hook_wiring_diagnostics import inspect_hook_wiring
+from .agent_hook_diagnosis import diagnose_agent_hooks
 from .agent_integration_readiness import inspect_agent_integration
 from .hook_plan import build_hook_plan, default_hook_targets, UnsafeHookConfiguration
 from .hook_install import HookInstallError, modify_existing_hooks
@@ -534,6 +535,29 @@ def hook_watch_cli(*, source: str, seconds: float) -> int:
     print("No event establishes completion or permission to suspend.")
     print("ISC automatic suspend: NOT IMPLEMENTED")
     return 0 if result.claimed_events is not None else 2
+
+
+def agent_diagnose_cli(*, source: str) -> int:
+    """Classify static hook readiness separately from actual claimed traffic."""
+    record = diagnose_agent_hooks(source)
+    print("ISC AGENT HOOK DIAGNOSIS — READ ONLY")
+    print(f"Source: {record.source}")
+    print(f"Outcome: {record.outcome}")
+    print("Configured ISC hook event types: " + (
+        "UNKNOWN" if record.configured_events is None
+        else str(record.configured_events)
+    ))
+    print("Observed non-synthetic event claims since receiver start: " + (
+        "UNKNOWN" if record.observed_events is None
+        else str(record.observed_events)
+    ))
+    print("Receiver: " + ("AVAILABLE" if record.receiver_available
+                          else "UNAVAILABLE"))
+    print("Zero events can be normal when an agent is idle or not running.")
+    print("A claimed event does NOT authenticate its application or task.")
+    print("No agents launched or configuration and power settings changed.")
+    print("ISC automatic suspend: NOT IMPLEMENTED")
+    return 0
 
 
 def hook_wiring_cli(*, source: str) -> int:
@@ -1166,7 +1190,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?",
-        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "hook-wiring", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
+        choices=("status", "idle", "inhibitors", "gnome-inhibitors", "processes", "check", "hook-probe", "agent-integration", "hook-watch", "hook-wiring", "agent-diagnose", "monitor", "send-hook", "hook-plan", "hook-enable", "hook-disable", "mode", "serve", "power", "sleep", "suspend", "tray", "tray-check", "autostart", "keep-awake", "hibernate", "hybrid-sleep", "power-profiles", "display-off", "power-settings", "service", "monitor-service", "native-activity", "sessions", "scheduled-work", "independent-services", "timer-files", "timer-associations", "timer-service-states", "timer-service-pids", "timer-service-tasks", "timer-task-watch", "timer-service-watch", "service-invocations", "hook-self-test", "process-watch", "app", "window"),
         default="status",
     )
     parser.add_argument(
@@ -1309,6 +1333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.source is None:
             parser.error("hook-watch requires --source")
         return hook_watch_cli(source=args.source, seconds=args.seconds)
+    if args.command == "agent-diagnose":
+        if args.source is None:
+            parser.error("agent-diagnose requires --source")
+        return agent_diagnose_cli(source=args.source)
     if args.command == "hook-wiring":
         if args.source is None:
             parser.error("hook-wiring requires --source")
