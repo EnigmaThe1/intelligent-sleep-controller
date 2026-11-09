@@ -13,6 +13,7 @@ import re
 import selectors
 import subprocess
 import time
+from typing import Callable
 
 _MATCH = ("type='signal',sender='org.freedesktop.systemd1',"
           "path='/org/freedesktop/systemd1',"
@@ -23,7 +24,7 @@ _ALLOWED_ENV = ("PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
                 "LANG", "LC_ALL")
 _HEADER = re.compile(
     rb"(?:^|\n)\xe2\x80\xa3 Type=signal[^\n]{0,200}\n"
-    rb"[ \t]+Sender=:[0-9]+\.[0-9]+[ \t]+"
+    rb"[ \t]+Sender=(?P<sender>:[0-9]+\.[0-9]+)[ \t]+"
     rb"Path=/org/freedesktop/systemd1[ \t]+"
     rb"Interface=org\.freedesktop\.systemd1\.Manager[ \t]+"
     rb"Member=(JobNew|JobRemoved|UnitNew|UnitRemoved)[ \t]*(?:\r?\n)"
@@ -49,14 +50,18 @@ def _recognise_header(raw: bytes) -> bool:
     return _HEADER.search(raw) is not None
 
 
-def probe_live_user_signal(*, seconds: int = 3) -> LiveSignalProbe:
+def probe_live_user_signal(
+    *, seconds: int = 3,
+    _sender_callback: Callable[[str], None] | None = None,
+) -> LiveSignalProbe:
     """Observe one candidate header; bounded bytes/time, kill and reap.
 
     Only an explicit invocation runs the command. No synthetic events, no
     raw headers returned. Quiet/timeout and early exit remain UNKNOWN.
     """
     unknown = LiveSignalProbe("UNKNOWN")
-    if type(seconds) is not int or not 1 <= seconds <= 10:
+    if (type(seconds) is not int or not 1 <= seconds <= 10
+            or (_sender_callback is not None and not callable(_sender_callback))):
         return unknown
     env = {key: os.environ[key] for key in _ALLOWED_ENV if key in os.environ}
     env["SYSTEMD_COLORS"] = "0"
@@ -82,7 +87,12 @@ def probe_live_user_signal(*, seconds: int = 3) -> LiveSignalProbe:
                 raw.extend(block)
                 if len(raw) >= _MAX_BYTES:
                     return unknown
-                if _recognise_header(bytes(raw)):
+                match = _HEADER.search(raw)
+                if match is not None:
+                    if _sender_callback is not None:
+                        # Ephemeral private unique name, never in result/log.
+                        # Callback failure must not confirm an event.
+                        _sender_callback(match.group("sender").decode("ascii"))
                     return LiveSignalProbe("CANDIDATE_SIGNAL_UNVERIFIED", 1)
             if proc.poll() is not None:
                 return unknown
