@@ -10,7 +10,7 @@ import time
 
 from .receiver import read_monitor_health
 from .service import MonitorUnavailable, serve_monitor
-from .settings import ModeConfigError, read_mode
+from .mode_gate import current_mode
 
 
 def monitor_service_loop(
@@ -31,11 +31,7 @@ def monitor_service_loop(
     attempts = 0
     while max_iterations is None or attempts < max_iterations:
         attempts += 1
-        try:
-            mode = read_mode().mode
-        except ModeConfigError:
-            mode = "off"
-        if mode != "monitor":
+        if not current_mode().monitor_allowed:
             failures = 0
             time.sleep(idle_seconds)
             continue
