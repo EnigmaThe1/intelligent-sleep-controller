@@ -53,7 +53,7 @@ def detached_work_command(
     # which may expand $VARIABLE. Double the marker so its literal meaning
     # survives; do not run a shell or enable variable expansion from input.
     command = protected[:6] + tuple(
-        part.replace("$", "$") for part in protected[6:]
+        part.replace("$", "$" * 2) for part in protected[6:]
     )
     return (
         _SYSTEMD_RUN,
