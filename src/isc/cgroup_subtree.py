@@ -122,6 +122,7 @@ def observe_cgroup_subtree(
     if first is None:
         return unknown
     try:
+        identities: dict[int, ProcessIdentity] = {}
         for pid in first:
             identity = identity_lookup(pid, proc_root=proc_root, uid=uid)
             if (not isinstance(identity, ProcessIdentity)
@@ -135,9 +136,27 @@ def observe_cgroup_subtree(
             if (not isinstance(member, CgroupMembership)
                     or member.coverage_verified or member.match is not True):
                 return unknown
+            identities[pid] = identity
     except (OSError, TypeError, ValueError, RuntimeError):
         return unknown
     last = _collect_pids(root, service_cgroup)
     if last is None or last != first:
+        return unknown
+    # A PID list may stay identical while a worker exits and its PID is
+    # reused, or membership changes immediately after the first check.
+    # Revalidate both kernel process identity and cgroup membership after
+    # the second inventory. Count-only agreement is not identity evidence.
+    try:
+        for pid in last:
+            identity = identity_lookup(pid, proc_root=proc_root, uid=uid)
+            if identity != identities[pid]:
+                return unknown
+            member = membership_probe(
+                identity, service_cgroup, proc_root=proc_root, uid=uid,
+            )
+            if (not isinstance(member, CgroupMembership)
+                    or member.coverage_verified or member.match is not True):
+                return unknown
+    except (OSError, TypeError, ValueError, RuntimeError):
         return unknown
     return CgroupSubtreeSummary(len(first), unknown=False)
