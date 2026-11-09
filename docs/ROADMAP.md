@@ -1,5 +1,14 @@
 # Roadmap
 
+> **ISC 1.0 scope is frozen.** Active delivery is the four-milestone
+> [ISC 1.0 completion contract](ISC_1_0_COMPLETION_PLAN.md):
+> (1) Consolidate, (2) Safe automatic execution, (3) Minimum trusted work
+> protection, (4) Hardware verification and release. The historical Step
+> 97–99j experimental probes below are not the active development queue.
+> No additional exploratory monitoring work without a specific release
+> blocker. Automatic suspension remains disarmed.
+
+
 ## Engineering constraint — reuse Linux facilities
 
 - [x] Adopt OS-native-first architecture: ISC is a common CLI/tray power-management hub, not a competing implementation.
