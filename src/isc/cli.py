@@ -1232,15 +1232,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("Usage: isc protected-status isc-protected-<16 hex>.service")
             print("READ ONLY. No service or power settings changed.")
             return 2
-        check = inspect_protected_unit(incoming[1])
+        protection = inspect_protected_unit(incoming[1])
         print("ISC PROTECTED DETACHED JOB — READ ONLY")
         print("Native inhibitor: " + (
-            "VERIFIED NOW" if check.verified else "NOT VERIFIED"
+            "VERIFIED NOW" if protection.verified else "NOT VERIFIED"
         ))
-        print("Reason: " + check.reason)
+        print("Reason: " + protection.reason)
         print("This is a momentary observation, not a lifetime guarantee.")
         print("No services or power settings changed.")
-        return 0 if check.verified else 2
+        return 0 if protection.verified else 2
 
     if incoming and incoming[0] == "protect-detached":
         if len(incoming) < 3 or incoming[1] != "--":
