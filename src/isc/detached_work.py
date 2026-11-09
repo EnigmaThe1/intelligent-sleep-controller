@@ -52,8 +52,8 @@ def detached_work_command(
     # systemd-run passes ExecStart arguments through the service manager,
     # which may expand $VARIABLE. Double the marker so its literal meaning
     # survives; do not run a shell or enable variable expansion from input.
-    command = protected[:7] + tuple(
-        part.replace("$", "$$") for part in protected[7:]
+    command = protected[:6] + tuple(
+        part.replace("$", "$") for part in protected[6:]
     )
     return (
         _SYSTEMD_RUN,
