@@ -94,9 +94,14 @@ def probe_live_user_signal(*, seconds: int = 3) -> LiveSignalProbe:
             selected.close()
         if proc is not None:
             if proc.poll() is None:
-                proc.kill()
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+            if proc.stdout is not None:
+                proc.stdout.close()
             try:
-                proc.communicate(timeout=1)
+                proc.wait(timeout=1)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=1)
