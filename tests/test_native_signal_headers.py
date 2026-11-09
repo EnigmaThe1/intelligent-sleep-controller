@@ -57,7 +57,7 @@ class SignalHeaderAssessmentTests(unittest.TestCase):
         self.assertEqual(assess_manager_signal_headers([row]).state, "UNKNOWN")
 
     def test_bad_types_rejected(self):
-        for value in (None, {}, "private", 3, [header()], [None]):
+        for value in (None, {}, "private", 3, [None], [123]):
             self.assertEqual(assess_manager_signal_headers(value).state, "UNKNOWN")
 
     def test_oversize_batch_rejected(self):
