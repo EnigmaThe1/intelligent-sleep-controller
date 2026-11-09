@@ -36,6 +36,7 @@ from .desktop_launcher import (
 )
 from .desktop_window import run_window
 from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
+from .protected_work import run_protected_work
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
     display_support, display_off, open_power_settings,
@@ -1151,6 +1152,19 @@ def scheduled_work_cli() -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # A protected command has arbitrary command-line flags and must be
+    # forwarded intact, without the generic ISC argument parser or shell.
+    incoming = list(sys.argv[1:] if argv is None else argv)
+    if incoming and incoming[0] == "protect":
+        if len(incoming) < 3 or incoming[1] != "--":
+            print("Usage: isc protect -- COMMAND [ARGS...]")
+            print("Only foreground commands started with protect are covered.")
+            return 2
+        result = run_protected_work(incoming[2:])
+        if result:
+            print("ISC protected work unavailable; no command was started.")
+        return result
+
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="Read-only foundation for future intelligent Linux sleep management",
@@ -1177,7 +1191,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--forever", action="store_true", help="Keep Awake until cancelled while this terminal is running")
     parser.add_argument("--profile", choices=PROFILES, help="Select an OS-supported power profile")
     parser.add_argument("--set", choices=("off", "monitor", "on"), help="Persist ISC operator preference (ON currently unavailable)")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(incoming)
     if args.command == "app":
         if args.install and args.uninstall:
             parser.error("choose either --install or --uninstall")
