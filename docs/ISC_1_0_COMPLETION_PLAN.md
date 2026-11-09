@@ -139,6 +139,19 @@ coverage, atomic OFF transitions at the suspend decision boundary, and
 verified hardware resume behaviour are still required. A positive native
 capability check is necessary but insufficient.
 
+### Milestone 1 — main-window Keep Awake completed in code
+
+The main GNOME application window now exposes temporary and indefinite
+Keep Awake controls with cancellation and live status, reusing the
+existing verified `KeepAwakeManager`. This removes reliance on the
+optional tray for ordinary user operation. Each window owns only its own
+inhibitor and releases it when closed. No inhibitor starts automatically,
+and OFF/MONITOR/ON semantics remain unchanged.
+
+Desktop GUI acceptance, reboot persistence of OFF/MONITOR, and GNOME
+automatic-suspend conflict handling remain Milestone 1 release checks.
+Hardware automatic suspend is still disarmed.
+
 ### Milestone 3 — practical protected-work command
 
 Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
