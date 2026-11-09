@@ -33,6 +33,24 @@ class TrayRuntimeTests(unittest.TestCase):
             )
         spawn.assert_not_called()
 
+    def test_unavailable_on_does_not_spawn_tray_monitor(self):
+        supervisor = TrayMonitorProcess()
+        with patch("isc.tray_runtime.subprocess.Popen") as spawn:
+            self.assertEqual(
+                supervisor.reconcile(mode="on", config_valid=True),
+                "invalid_configuration",
+            )
+        spawn.assert_not_called()
+
+    def test_unknown_setting_does_not_spawn_tray_monitor(self):
+        supervisor = TrayMonitorProcess()
+        with patch("isc.tray_runtime.subprocess.Popen") as spawn:
+            self.assertEqual(
+                supervisor.reconcile(mode="unexpected", config_valid=True),
+                "invalid_configuration",
+            )
+        spawn.assert_not_called()
+
     @patch("isc.tray_runtime.discover_monitor_socket")
     @patch("isc.tray_runtime.subprocess.Popen")
     def test_spawn_uses_only_isc_monitor_command(self, spawn, discover):
