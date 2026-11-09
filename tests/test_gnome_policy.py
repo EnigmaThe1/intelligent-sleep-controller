@@ -24,7 +24,12 @@ class GnomePolicyTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "config"
         self.project = self.root / "intelligent-sleep-controller"
-        self.project.mkdir(parents=True, mode=0o700)
+        # Create each level with explicit private permissions. A recursive
+        # mkdir(parents=True, mode=0o700) creates *intermediate* directories
+        # using 0o777 & umask: on Ubuntu umask=0002 this produced 0o775,
+        # which our correctly fail-closed settings validator must reject.
+        self.root.mkdir(mode=0o700)
+        self.project.mkdir(mode=0o700)
         self.values = {
             "sleep-inactive-ac-timeout": 1800,
             "sleep-inactive-battery-timeout": 900,
@@ -59,6 +64,24 @@ class GnomePolicyTests(unittest.TestCase):
         self.assertFalse(state.managed)
         self.assertEqual(state.ac_timeout, 1800)
         self.assertEqual(state.battery_timeout, 900)
+        self.assertFalse(self.backup.exists())
+
+    def test_fixture_has_private_permissions_even_with_permissive_umask(self):
+        # Should be invariant for normal umasks such as 0022 and 0002.
+        self.assertEqual(self.root.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(self.project.stat().st_mode & 0o777, 0o700)
+
+    def test_group_writable_config_root_still_fails_closed(self):
+        # Do not relax the real security boundary to accommodate a fixture.
+        self.root.chmod(0o775)
+        result = inspect_gnome_policy(config_root=self.root)
+        self.assertEqual(result.reason, "backup_unverified")
+        self.assertTrue(result.conflict)
+        with self.assertRaises(GnomePolicyError):
+            change_gnome_policy(
+                "disable", confirmed=True, config_root=self.root,
+            )
+        self.assertEqual(self.values, self.original)
         self.assertFalse(self.backup.exists())
 
     def test_preview_on_fresh_install_does_not_make_directory(self):
