@@ -14,10 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from .manual_power import (
-    ManualSuspendResult, SuspendAssessment, assess_manual_suspend,
-    _submit_after_preflight,
-)
+from .manual_power import ManualSuspendResult, _submit_after_preflight
+from .auto_native import AutoNativeAssessment, assess_auto_native_suspend
 from .mode_gate import EffectiveMode, current_mode
 from .policy import Snapshot, evaluate
 from .host_safety import read_host_snapshot
@@ -42,18 +40,20 @@ def attempt_automatic_suspend(
     *,
     snapshot_reader: Callable[[], Snapshot] | None = read_host_snapshot,
     mode_reader: Callable[[], EffectiveMode] = current_mode,
-    native_preflight: Callable[[], SuspendAssessment] = assess_manual_suspend,
+    native_preflight: Callable[[], AutoNativeAssessment] = assess_auto_native_suspend,
     submit: Callable[[], ManualSuspendResult] = _submit_after_preflight,
 ) -> AutomaticSuspendResult:
     """One guarded auto request. Never schedules itself or enables ON.
 
     Reads two fresh host snapshots through the same source as 'isc check'. The
-    native preflight must confirm real systemd capability, empty unverified
-    process inventory and no effective sleep inhibitors. A final mode check
+    native preflight confirms real systemd capability and clear sleep/idle
+    inhibitors. Workload coverage is assessed ONLY by the separate trusted
+    host Snapshot, never by manual-suspend consent or process heuristics. A final mode check
     is performed immediately before the native request, whose own preflight
     rechecks capability/inhibitors. OFF and MONITOR cannot call submit.
 
-    Host source coverage is currently incomplete and cannot approve sleep.\n    In this release the shipped mode gate *always* disables auto execution.
+    Host source coverage is currently incomplete and cannot approve sleep.
+    In this release the shipped mode gate *always* disables auto execution.
     Dependency injection is only for deterministic tests; never expose an
     external API that can inject forged trusted snapshots or ON state.
     """
@@ -76,13 +76,11 @@ def attempt_automatic_suspend(
             return AutomaticSuspendResult(False, "initial_safety_check_blocked")
 
         native = native_preflight()
-        if (not isinstance(native, SuspendAssessment)
-                or native.request_possible is not True
+        if (not isinstance(native, AutoNativeAssessment)
+                or native.ready is not True
                 or native.capability != "yes"
-                or native.blockers
-                or native.workload_coverage_verified is not True):
-            # Manual native preflight presently reports coverage unverified.
-            # It cannot silently confer automatic workload authority.
+                or native.blockers):
+            # Native readiness is not application workload coverage.
             return AutomaticSuspendResult(False, "native_safety_check_blocked")
 
         final = snapshot_reader()
