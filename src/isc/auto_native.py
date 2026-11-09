@@ -82,8 +82,10 @@ def submit_automatic_native() -> AutoNativeSubmitResult:
 
     No injectable readers: an artificial ON from a unit test must never
     grant real power authority. The current release disarms ON in settings
-    and mode_gate. Transition serialization, hardware validation and trusted
-    workload coverage must be completed *before* ON is ever enabled.\n    An OFF requested after native dispatch cannot revoke a suspend already\n    accepted by logind. The settings lock establishes a single ordering.
+    and mode_gate. The existing settings lock now orders dispatch with mode
+    changes, but an OFF requested after native dispatch cannot revoke a
+    suspend already accepted by logind. Hardware validation and complete
+    workload/wake evidence are still required before ON may be enabled.
     """
     try:
         mode = current_mode()
