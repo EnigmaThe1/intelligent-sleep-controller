@@ -32,6 +32,21 @@ class TrayTests(unittest.TestCase):
     def test_unsafe_config_fails_closed(self, mode, socket):
         self.assertEqual(tray_snapshot(), TraySnapshot("off", False, False, False))
 
+    @patch("isc.tray.discover_monitor_socket", return_value=None)
+    @patch("isc.tray.read_mode", return_value=ModeStatus("on", True))
+    def test_unsupported_on_is_not_displayed_as_active(self, mode, socket):
+        state = tray_snapshot()
+        self.assertEqual(state.mode, "off")
+        self.assertFalse(state.valid)
+        self.assertFalse(state.receiver_advertised)
+
+    @patch("isc.tray.discover_monitor_socket", return_value=None)
+    @patch("isc.tray.read_mode", return_value=ModeStatus("unknown", True))
+    def test_unknown_preference_fails_closed(self, mode, socket):
+        state = tray_snapshot()
+        self.assertEqual(state.mode, "off")
+        self.assertFalse(state.valid)
+
     @patch.dict(os.environ, {"DISPLAY": "", "WAYLAND_DISPLAY": ""})
     def test_missing_desktop_is_reported(self):
         issues = backend_probe()
