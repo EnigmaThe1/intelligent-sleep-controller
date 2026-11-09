@@ -167,6 +167,41 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(results, ["invalid_or_unavailable_mode"])
         self.assertFalse(socket.exists())
 
+    def test_unsupported_on_mode_cannot_start_receiver(self):
+        from isc.settings import ModeStatus
+        with patch("isc.service.read_mode", return_value=ModeStatus("on", True)):
+            with self.assertRaisesRegex(
+                    MonitorUnavailable, "invalid_or_unavailable_mode"):
+                serve_monitor(max_seconds=0.1)
+        self.assertFalse((self.runtime / "isc-monitor").exists())
+
+    def test_corrupt_on_mode_stops_running_receiver(self):
+        set_mode("monitor", config_root=self.root)
+        results = []
+        def runner():
+            try:
+                results.append(serve_monitor(
+                    max_seconds=2, poll_seconds=0.05, quiet=True,
+                ))
+            except MonitorUnavailable as exc:
+                results.append(str(exc))
+        thread = threading.Thread(target=runner)
+        thread.start()
+        socket = self.runtime / "isc-monitor" / "events.sock"
+        try:
+            for _ in range(100):
+                if socket.exists():
+                    break
+                time.sleep(0.005)
+            self.assertTrue(socket.exists())
+            config = self.root / "intelligent-sleep-controller" / "settings.json"
+            config.write_text('{"version": 1, "mode": "on"}', encoding="utf-8")
+        finally:
+            thread.join(timeout=3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(results, ["invalid_or_unavailable_mode"])
+        self.assertFalse(socket.exists())
+
     def test_two_instances_refuse_to_replace_existing_socket(self):
         set_mode("monitor", config_root=self.root)
         from isc.receiver import LocalMonitor
