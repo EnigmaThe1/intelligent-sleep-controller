@@ -104,6 +104,26 @@ workload/wake criterion on supported Linux setups. Until that exists,
 `coverage_complete=False` and `scheduled_work_safe=False` must not
 be lifted to manufacture a successful ON decision.
 
+### Native preflight consolidation
+
+Automatic ON eligibility now uses a dedicated read-only
+`assess_auto_native_suspend()` which reuses the existing logind
+`CanSuspend` and `ListInhibitors` readers. It refuses permission
+challenges, unavailable capabilities, sleep/idle block and delay locks,
+unrecognised replies and missing inhibitor inventories.
+
+The earlier implementation passed through the *manual* suspend
+preflight, which always reported workload coverage unverified and was
+designed for deliberate human confirmation. The automatic path no
+longer relies on that manual exception or its coverage flag. Instead,
+it independently requires the complete live `Snapshot` policy,
+and retains the final-mode and final-snapshot checks before any native
+request. The shipped ON gate is still **disarmed**.
+
+No native readiness result grants workload coverage or wake-safety
+authority. Hardware sleep/wake validation and scheduler coverage
+remain release blockers.
+
 **Next delivery task:** finish the minimal trusted workload/wake evidence
 needed to satisfy the guarded executor on an ordinary idle machine,
 without weakening unknown-work safety or adding another monitoring system.
