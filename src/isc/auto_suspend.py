@@ -20,6 +20,7 @@ from .manual_power import (
 )
 from .mode_gate import EffectiveMode, current_mode
 from .policy import Snapshot, evaluate
+from .host_safety import read_host_snapshot
 
 
 @dataclass(frozen=True)
@@ -39,20 +40,20 @@ def _armed(mode: object) -> bool:
 
 def attempt_automatic_suspend(
     *,
-    snapshot_reader: Callable[[], Snapshot] | None = None,
+    snapshot_reader: Callable[[], Snapshot] | None = read_host_snapshot,
     mode_reader: Callable[[], EffectiveMode] = current_mode,
     native_preflight: Callable[[], SuspendAssessment] = assess_manual_suspend,
     submit: Callable[[], ManualSuspendResult] = _submit_after_preflight,
 ) -> AutomaticSuspendResult:
     """One guarded auto request. Never schedules itself or enables ON.
 
-    Requires two fresh snapshots from a future trustworthy adapter. The
+    Reads two fresh host snapshots through the same source as 'isc check'. The
     native preflight must confirm real systemd capability, empty unverified
     process inventory and no effective sleep inhibitors. A final mode check
     is performed immediately before the native request, whose own preflight
     rechecks capability/inhibitors. OFF and MONITOR cannot call submit.
 
-    In this release the shipped mode gate *always* disables auto execution.
+    Host source coverage is currently incomplete and cannot approve sleep.\n    In this release the shipped mode gate *always* disables auto execution.
     Dependency injection is only for deterministic tests; never expose an
     external API that can inject forged trusted snapshots or ON state.
     """
