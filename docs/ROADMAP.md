@@ -45,6 +45,7 @@
 - [x] Step 99c: bounded opt-in systemd 255 user-bus observation window with output discarded and timeout; transport only, not event delivery verification
 - [x] Step 99d: bounded pure Manager signal-header assessment; live event delivery remains unverified
 - [x] Step 99e: opt-in bounded one-shot live user-manager signal header observation; actual delivery remains unauthenticated and incomplete
+- [x] Step 99f: opt-in bounded unique systemd user-bus name-owner query and pure sender correlation (not integrated into live reader)
 - [ ] Multi-scheduler continuous observation and trusted job-owner verification
 - [x] Read-only on-demand systemd active-service discovery outside effective timer Unit= links, including independent service counts; no complete job inventory, authenticated ownership or automatic suspend
 - [x] Periodic MONITOR-only independent-service aggregates with per-scope fail-closed sampling, stale health rejection and aggregate net-count changes; no service identifiers, completion claims or suspend authority
