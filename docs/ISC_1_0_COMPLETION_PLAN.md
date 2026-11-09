@@ -86,6 +86,24 @@ action is performed as part of continuous integration.
   transitions and Milestone 4 hardware wake verification. No one should
   interpret the new execution code as permission to auto-suspend.
 
+### Milestone 3 integration progress
+
+`host_safety.py` now supplies the same read-only, conservative
+`Snapshot` composition to the user-facing `isc check` command and
+the disarmed automatic-suspend executor. It uses existing GNOME idle,
+GNOME session inhibitor, logind inhibitor, session census and /proc
+candidate readers. Candidate process identities are replaced by ordinal
+labels; unreadable/missing process information remains UNKNOWN.
+Even when all current probes respond successfully, complete application
+and scheduler/wake coverage is **not verified**, so the native system
+cannot be automatically suspended.
+
+This is an integration of existing readers, not a new monitoring system.
+Remaining Milestone 3 work must establish a finite, actually trustworthy
+workload/wake criterion on supported Linux setups. Until that exists,
+`coverage_complete=False` and `scheduled_work_safe=False` must not
+be lifted to manufacture a successful ON decision.
+
 **Next delivery task:** finish the minimal trusted workload/wake evidence
 needed to satisfy the guarded executor on an ordinary idle machine,
 without weakening unknown-work safety or adding another monitoring system.
