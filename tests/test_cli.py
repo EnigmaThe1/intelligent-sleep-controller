@@ -135,6 +135,54 @@ class CLITests(unittest.TestCase):
                 self.assertIn("scheduled_work_safety_unverified", text)
                 self.assertIn("Verdict: DO NOT AUTO-SUSPEND", text)
 
+    @patch("isc.cli.read_session_census", return_value=None)
+    @patch("isc.cli.read_process_candidates", return_value=None)
+    @patch("isc.cli.read_gnome_inhibit_flags")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2000000)
+    @patch("isc.cli.read_scheduled_work")
+    def test_check_accounts_for_independent_systemd_services_and_timers(
+        self, scheduled, idle, inhibitors, gnome, processes, sessions,
+    ):
+        from isc.scheduled_work import ScheduledWorkCensus, UnitCounts
+        from isc.gnome_inhibitors import GnomeInhibitFlags
+        scheduled.return_value = ScheduledWorkCensus(
+            system_timers=UnitCounts(1, waiting_timers=1),
+            user_timers=UnitCounts(1, waiting_timers=0),
+            system_services=UnitCounts(1, running_services=1),
+            user_services=UnitCounts(1, running_services=1),
+        )
+        gnome.return_value = GnomeInhibitFlags(False, False)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        rendered = output.getvalue()
+        self.assertIn("Observed systemd units: 2 running services", rendered)
+        self.assertIn("1 waiting timers", rendered)
+        self.assertIn("work_unknown:timer_wake_policy_unverified", rendered)
+        self.assertIn("work_unknown:running_user_services_unclassified", rendered)
+        self.assertIn("Verdict: DO NOT AUTO-SUSPEND", rendered)
+        self.assertNotIn("secret.service", rendered)
+
+    @patch("isc.cli.read_session_census", return_value=None)
+    @patch("isc.cli.read_process_candidates", return_value=None)
+    @patch("isc.cli.read_gnome_inhibit_flags")
+    @patch("isc.cli.read_inhibitors", return_value=())
+    @patch("isc.cli.read_gnome_idle_ms", return_value=2000000)
+    @patch("isc.cli.read_scheduled_work", return_value=None)
+    def test_check_unavailable_systemd_inventory_remains_unknown(
+        self, scheduled, idle, inhibitors, gnome, processes, sessions,
+    ):
+        from isc.gnome_inhibitors import GnomeInhibitFlags
+        gnome.return_value = GnomeInhibitFlags(False, False)
+        output = StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(main(["check"]), 0)
+        rendered = output.getvalue()
+        self.assertIn("Systemd timer/service evidence: UNKNOWN", rendered)
+        self.assertIn("work_unknown:scheduler_inventory_unverified", rendered)
+        self.assertIn("Verdict: DO NOT AUTO-SUSPEND", rendered)
+
     @patch("isc.cli.read_process_candidates")
     def test_processes_never_claim_a_pid_is_active_or_idle(self, scanner):
         from isc.processes import ProcessCandidate, ProcessScan
