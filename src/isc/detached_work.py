@@ -32,18 +32,23 @@ class DetachedWorkResult:
     unit: str | None = None
 
 
+def valid_detached_unit(unit: object) -> bool:
+    """Recognise only ISC-generated transient user-unit names."""
+    return (
+        type(unit) is str
+        and unit.startswith(_PREFIX)
+        and unit.endswith(".service")
+        and len(unit) == len(_PREFIX) + _HEX_LENGTH + len(".service")
+        and all(char in "0123456789abcdef"
+                for char in unit[len(_PREFIX):-len(".service")])
+    )
+
+
 def detached_work_command(
     argv: Sequence[str], *, unit: str,
 ) -> tuple[str, ...] | None:
     """Create fixed, bounded argv for native systemd user manager."""
-    if (
-        type(unit) is not str
-        or not unit.startswith(_PREFIX)
-        or not unit.endswith(".service")
-        or len(unit) != len(_PREFIX) + _HEX_LENGTH + len(".service")
-        or any(char not in "0123456789abcdef"
-               for char in unit[len(_PREFIX):-len(".service")])
-    ):
+    if not valid_detached_unit(unit):
         return None
     protected = protected_command(argv)
     if protected is None:
