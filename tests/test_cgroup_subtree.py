@@ -41,8 +41,8 @@ class CgroupSubtreeTests(unittest.TestCase):
     def test_nested_reparented_process_counted_without_ppid_tracking(self):
         result = self.observe()
         self.assertEqual(result, CgroupSubtreeSummary(2, unknown=False))
-        self.assertEqual(self.lookup.call_count, 2)
-        self.assertEqual(self.probe.call_count, 2)
+        self.assertEqual(self.lookup.call_count, 4)
+        self.assertEqual(self.probe.call_count, 4)
         self.assertFalse(result.coverage_verified)
         self.assertFalse(result.task_owner_authenticated)
         self.assertNotIn("agent.service", repr(result))
@@ -120,6 +120,48 @@ class CgroupSubtreeTests(unittest.TestCase):
     def test_duplicate_pid_across_child_cgroups_is_unknown(self):
         (self.child / "cgroup.procs").write_text("101\n")
         self.assertTrue(self.observe().unknown)
+
+    def test_pid_reuse_with_unchanged_pid_list_is_unknown(self):
+        """A detached worker can be replaced while its PID stays listed."""
+        calls = {101: 0, 102: 0}
+        def lookup(pid, **_):
+            calls[pid] += 1
+            start = pid + 500 + (1 if pid == 102 and calls[pid] > 1 else 0)
+            return ProcessIdentity(pid, start, 1, "worker")
+        self.lookup.side_effect = lookup
+        result = self.observe()
+        self.assertTrue(result.unknown)
+        self.assertIsNone(result.observed_processes)
+
+    def test_cgroup_membership_change_after_second_inventory_is_unknown(self):
+        counts = {101: 0, 102: 0}
+        def membership(identity, *_, **__):
+            counts[identity.pid] += 1
+            return CgroupMembership(
+                False if identity.pid == 102 and counts[102] > 1 else True
+            )
+        self.probe.side_effect = membership
+        result = self.observe()
+        self.assertTrue(result.unknown)
+        self.assertIsNone(result.observed_processes)
+
+    def test_second_pass_lookup_exception_is_unknown(self):
+        counts = {101: 0, 102: 0}
+        def lookup(pid, **_):
+            counts[pid] += 1
+            if pid == 101 and counts[pid] > 1:
+                raise OSError("worker exited")
+            return ProcessIdentity(pid, pid + 500, 1, "worker")
+        self.lookup.side_effect = lookup
+        self.assertTrue(self.observe().unknown)
+
+    def test_stable_second_identity_pass_returns_count_only(self):
+        result = self.observe()
+        self.assertEqual(result, CgroupSubtreeSummary(2, unknown=False))
+        self.assertEqual(self.lookup.call_count, 4)
+        self.assertEqual(self.probe.call_count, 4)
+        self.assertNotIn("worker", repr(result))
+        self.assertNotIn("101", repr(result))
 
     def test_no_process_args_or_environment_access(self):
         with patch("builtins.open", side_effect=AssertionError("unexpected read")):
