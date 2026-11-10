@@ -43,6 +43,7 @@ from .protected_work import run_protected_work
 from .detached_work import launch_detached_work
 from .protected_status import inspect_protected_unit
 from .existing_service_check import observe_existing_user_service
+from .existing_service_guard import start_existing_service_guard, run_existing_guard_worker
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
     display_support, display_off, open_power_settings,
@@ -1243,6 +1244,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("No services or power settings changed.")
         return 0 if protection.verified else 2
 
+    if incoming and incoming[0] == "protect-existing":
+        if len(incoming) != 3 or incoming[1] != "--":
+            print("Usage: isc protect-existing -- USER_SERVICE.service")
+            print("Explicit foreground native inhibitor; Ctrl+C ends protection.")
+            return 2
+        result = start_existing_service_guard(incoming[2])
+        if result:
+            print("Existing-service protection not started or not verified.")
+            print("No existing service or power setting changed.")
+        return result
+
+    # Worker is only supported under the explicit systemd-inhibit wrapper.
+    # Invoking it directly never grants a sleep-safety or inhibitor claim.
+    if incoming and incoming[0] == "_existing-guard-worker":
+        if len(incoming) != 2:
+            return 2
+        return run_existing_guard_worker(incoming[1])
+
     if incoming and incoming[0] == "existing-service":
         if len(incoming) != 2:
             print("Usage: isc existing-service USER_SERVICE.service")
@@ -1282,7 +1301,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="ISC Linux sleep controls (automatic suspend not enabled)",
-        epilog="Foreground: isc protect -- CMD; detached: isc protect-detached -- CMD; inspect: isc existing-service UNIT",
+        epilog="Foreground: isc protect -- CMD; existing: isc protect-existing -- UNIT; inspect: isc existing-service UNIT",
     )
     parser.add_argument(
         "command", nargs="?",
