@@ -216,6 +216,24 @@ and `scheduled_work_safe=False` remain. Actual Ubuntu transient-unit
 acceptance is separate from synthetic tests and must not be confused with
 authorization to arm ON.
 
+### Milestone 3 — read-only existing-service verification
+
+The operator command `isc existing-service USER_SERVICE.service` joins
+pre-existing systemd-origin MainPID/invocation/cgroup verification with the
+bounded double-sampled cgroup-v2 subtree reader. It checks that the *same*
+user service activation and kernel process identity remain observed before
+and after the process census. Race, owner mismatch, missing procfs/cgroup
+data, unsupported system-scoped identity, and empty subtree all return
+UNKNOWN. No services are modified, restarted or stopped.
+
+The result is an aggregate process count and a strict *momentary membership*
+observation only. It must not be promoted to a task-state assertion:
+CPU waiting, child detachment outside the cgroup, model/network waits,
+independent job ownership and wake completion remain unverified. No
+per-service result upgrades `coverage_complete` or
+`scheduled_work_safe` and ON remains unavailable. A user-owned service
+can be inspected without disclosing private service details in ISC output.
+
 ### Milestone 3 — systemd evidence used by the safety decision
 
 The shared `host_safety.compose_host_snapshot` and the operator-visible
