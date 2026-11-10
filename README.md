@@ -21,6 +21,32 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 
+## Inspect an existing user service without restarting it
+
+ISC can now inspect an **already-running** systemd *user* service using
+its native MainPID, activation identity, cgroup membership and bounded
+process-subtree census. This is strictly read-only and does not require
+relaunching the application's service or modifying its unit configuration:
+
+```bash
+# Substitute the name of an existing user service on your machine.
+PYTHONPATH=src /usr/bin/python3 -m isc existing-service example.service
+```
+
+The output reports only whether the *current service-to-process membership*
+could be verified and an aggregate count of its observed processes. It does
+not output a process ID, cgroup path, service name or command-line arguments.
+The command fails closed when a process migrates or disappears during
+sampling, when the service restarts, when a probe cannot read its source, or
+when systemd/native process evidence does not match. It currently supports
+**same-user services** only; many system-scoped services run under other
+identities and cannot be certified through this route.
+
+A positive result is **not** an application task-idle or completion signal.
+Sleeping safely during detached work or model/network waits still requires
+trusted application lifecycle integration or a native inhibitor. ISC
+automatic ON remains disarmed.
+
 ## Protect an explicitly launched detached job
 
 For **new** background development jobs that must continue after the terminal
