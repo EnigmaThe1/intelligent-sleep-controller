@@ -96,7 +96,7 @@ def run_existing_guard_worker(
         return 2
     print("ISC EXISTING USER SERVICE GUARD")
     print("Read-only observation running. Operator cancellation: Ctrl+C.")
-    print("Missing service evidence does NOT release sleep protection.")
+    print("Missing service evidence does NOT establish safe completion.")
     previous: str | None = None
     try:
         while True:
@@ -120,7 +120,7 @@ def run_existing_guard_worker(
                 previous = state
             wait(_POLL_SECONDS)
     except KeyboardInterrupt:
-        print("Guard cancelled by operator; native inhibitor will be released.")
+        print("Guard cancelled by operator; surrounding inhibitor can exit.")
         return 0
     except (OSError, ValueError, RuntimeError, TypeError):
         # A failed observer must never report that work is complete.
