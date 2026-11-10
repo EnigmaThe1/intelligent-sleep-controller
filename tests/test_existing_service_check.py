@@ -19,14 +19,15 @@ from isc.cli import main
 NAME = "example-worker.service"
 IDENTITY = ProcessIdentity(812, 12345, 1, "python3")
 CGROUP = "/user.slice/user-1000.slice/user@1000.service/app.slice/example-worker.service"
+DEFAULT_SUBTREE = object()
 EVIDENCE = NativeServiceProcess(
     IDENTITY, NAME, "--user", "a" * 32, CGROUP,
 )
 
 
 class ExistingServiceCheckTests(unittest.TestCase):
-    def inspect(self, *, first=EVIDENCE, subtree=None, last=EVIDENCE):
-        if subtree is None:
+    def inspect(self, *, first=EVIDENCE, subtree=DEFAULT_SUBTREE, last=EVIDENCE):
+        if subtree is DEFAULT_SUBTREE:
             subtree = CgroupSubtreeSummary(3, unknown=False)
         discovery = Mock(side_effect=(first, last))
         scan = Mock(return_value=subtree)
