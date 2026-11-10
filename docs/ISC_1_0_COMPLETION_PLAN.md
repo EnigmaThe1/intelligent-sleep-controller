@@ -216,6 +216,27 @@ and `scheduled_work_safe=False` remain. Actual Ubuntu transient-unit
 acceptance is separate from synthetic tests and must not be confused with
 authorization to arm ON.
 
+### Milestone 3 — opt-in existing-service sleep inhibitor guard
+
+Added `isc protect-existing -- USER_SERVICE.service`, reusing the verified
+same-user native membership check as a preflight and the existing
+`systemd-inhibit --what=idle:sleep --mode=block` native protection.
+It runs separately from the original service: it does **not** rewrite
+units, restart processes, enable GNOME automatic sleep or arm ISC ON.
+The guard observes the service periodically but holds its own inhibitor
+until explicitly cancelled. Missing service information or vanished PIDs
+**never** silently release it: a service stopping does not prove detached
+or application-level work has completed.
+
+This gives the operator a practical way to temporarily protect a known
+existing service without touching it. The guard can consume power
+indefinitely and releases protection when its own process exits (including
+unexpected failure). It is a manual guard, not complete independent-work
+authentication or coverage. There is no automatic lifecycle enrollment,
+no claim of verified task completion, and `coverage_complete=False`
+and `scheduled_work_safe=False` remain unchanged. Tests mock native exec
+and never acquire real inhibitors or suspend the host.
+
 ### Milestone 3 — read-only existing-service verification
 
 The operator command `isc existing-service USER_SERVICE.service` joins
