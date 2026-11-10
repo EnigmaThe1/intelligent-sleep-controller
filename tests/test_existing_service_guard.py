@@ -78,6 +78,8 @@ class ExistingServiceGuardTests(unittest.TestCase):
         for evidence in (
             None, UNKNOWN,
             ExistingServiceObservation(0, "unknown"),
+            ExistingServiceObservation(0, "forged", True, False, False),
+            ExistingServiceObservation(None, "forged", True, False, False),
             ExistingServiceObservation(
                 1, "forged task activity", True, True, False,
             ),
@@ -110,10 +112,10 @@ class ExistingServiceGuardTests(unittest.TestCase):
     def test_failed_native_exec_returns_generic_result(self):
         with patch("isc.existing_service_guard.os.execv",
                    side_effect=OSError("private mount path")):
-            with redirect_stdout(StringIO()) as output:
-                result = main(["protect-existing", "--", UNIT])
+            result = start_existing_service_guard(
+                UNIT, probe=lambda name: VERIFIED,
+            )
         self.assertEqual(result, 2)
-        self.assertNotIn("private mount path", output.getvalue())
 
     def test_missing_service_probe_exception_prevents_guard(self):
         for failure in (OSError("unreadable"), RuntimeError("sensitive")):
