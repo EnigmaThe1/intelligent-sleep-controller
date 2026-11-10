@@ -42,6 +42,7 @@ from .keepawake import KeepAwakeError, KeepAwakeManager, PRESETS_MINUTES
 from .protected_work import run_protected_work
 from .detached_work import launch_detached_work
 from .protected_status import inspect_protected_unit
+from .existing_service_check import observe_existing_user_service
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
     display_support, display_off, open_power_settings,
@@ -1242,6 +1243,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("No services or power settings changed.")
         return 0 if protection.verified else 2
 
+    if incoming and incoming[0] == "existing-service":
+        if len(incoming) != 2:
+            print("Usage: isc existing-service USER_SERVICE.service")
+            print("READ ONLY. Only current-user systemd services are supported.")
+            return 2
+        observed = observe_existing_user_service(incoming[1])
+        print("ISC EXISTING USER SERVICE — READ ONLY")
+        if observed.verified_service_membership:
+            print("Native service/process membership: VERIFIED NOW")
+            print(f"Observed processes in service cgroup: {observed.observed_processes}")
+        else:
+            print("Native service/process membership: NOT VERIFIED")
+            print("Observed processes in service cgroup: UNKNOWN")
+        print("Application task activity or completion: NOT VERIFIED")
+        print("Service observation: " + observed.reason)
+        print("Automatic sleep eligibility: NOT ESTABLISHED")
+        print("No services, workloads or system power settings changed.")
+        return 0 if observed.verified_service_membership else 2
+
     if incoming and incoming[0] == "protect-detached":
         if len(incoming) < 3 or incoming[1] != "--":
             print("Usage: isc protect-detached -- COMMAND [ARGS...]")
@@ -1262,7 +1282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="smart-sleep",
         description="ISC Linux sleep controls (automatic suspend not enabled)",
-        epilog="Foreground: isc protect -- CMD; detached: isc protect-detached -- CMD; verify: isc protected-status UNIT",
+        epilog="Foreground: isc protect -- CMD; detached: isc protect-detached -- CMD; inspect: isc existing-service UNIT",
     )
     parser.add_argument(
         "command", nargs="?",
