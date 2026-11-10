@@ -71,6 +71,8 @@ def start_existing_service_guard(
             or current.verified_service_membership is not True
             or current.workload_coverage_complete is not False
             or current.task_activity_verified is not False
+            or type(current.observed_processes) is not int
+            or current.observed_processes <= 0
         ):
             return 2
         os.execv(_SYSTEMD_INHIBIT, command)
