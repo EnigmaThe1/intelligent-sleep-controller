@@ -21,6 +21,34 @@ ISC is a **standalone project**. It does not depend on Pandora, OpenClaw, Claude
 - **Reversible installation.** Future installers must preserve and restore prior GNOME/systemd power settings.
 - **No assumptions about unrelated applications.** Unsupported tasks must not be silently classified idle.
 
+## Explicitly keep an already-running user service awake
+
+For an existing **systemd user service** that must not be interrupted, ISC
+can now acquire a separate native idle/sleep inhibitor **without modifying
+or restarting that service**. This requires a deliberate operator action:
+
+```bash
+# Example only: holds an inhibitor until manually cancelled with Ctrl+C.
+# Do NOT run just to inspect a service.
+PYTHONPATH=src /usr/bin/python3 -m isc protect-existing -- example.service
+```
+
+The named service must first pass ISC's current user-owned service/cgroup
+membership check. Once the inhibitor wrapper has started, ISC observes the
+service at 30-second intervals, but **never interprets a missing or idle
+process as task completion**. The inhibitor is held for the guard's
+lifetime, including if observations become unknown. It is released on
+explicit cancellation or if the guard itself exits. This is a foreground
+operation that **can keep the desktop awake indefinitely**; use it only for
+work that genuinely requires that protection.
+
+This is not an automatic service enrollment or task-completion detector.
+It does not protect other services, jobs which migrated outside the checked
+service cgroup, or a guard that has crashed. It does not guarantee protection
+after the terminal is closed. No persistent unit files are installed and
+the original service's lifecycle is unchanged. Automatic ON remains
+disabled until independent workloads and wake policy can be certified.
+
 ## Inspect an existing user service without restarting it
 
 ISC can now inspect an **already-running** systemd *user* service using
