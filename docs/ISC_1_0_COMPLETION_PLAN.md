@@ -34,6 +34,33 @@ Missing information always blocks sleep, never silently downgrades safety.
 | **3 — Minimum trusted work protection** | Reuse existing process/cgroup/invocation, inhibitor, scheduled-service and agent-hook evidence. Define a finite set of supported/unsupported workloads and a deterministic fail-closed unknown classification; do not introduce a monitoring platform. | Test active build/AI task, detached child, external wait, scheduled work, failed hooks and stale samples. Every unverified case blocks sleep. |
 | **4 — Hardware verification & release** | Test suspend/resume, multi-monitor recovery, task persistence and controlled trial on non-critical hardware; verify installation, OFF enforcement, Keep Awake and clean uninstall/rollback. | Explicit operator approval for hardware trials; repeated reliable wake/recovery and no lost work. Release 1.0 only after all gates are green. |
 
+## Release closeout — no further diagnostic expansion (2026-11-11)
+
+This is a **shipping plan**, not an open-ended research backlog.
+Do not add more process scanners, lifecycle observer variants, or native
+protocol layers to satisfy arbitrary test-count targets. Existing ISC
+diagnostics are sufficient for the current release decision.
+
+| Release requirement | Acceptance condition | State |
+| --- | --- | --- |
+| User controls | Installed GTK window and tray operate persistent OFF/MONITOR, Keep Awake and explicitly confirmed reversible GNOME idle-sleep control. | Implemented in source; desktop GUI acceptance still required. |
+| Native protection | Explicit foreground, detached and existing user-service guards acquire and release their Linux inhibitors without modifying original services. | Live guard acquisition and release demonstrated; scoped protection only. |
+| Actual intelligent ON | Reliable independent-work ownership/completion and scheduled wake coverage; all unknown work blocks the automatic decision. | **BLOCKED — currently unavailable by design.** |
+| Hardware readiness | Controlled multi-monitor suspend/resume and active-work preservation checks on supported hardware. | **BLOCKED — operator approval and successful hardware tests required.** |
+| Release package | Supported Ubuntu install/launch, persistent settings, optional systemd service, rollback and clean uninstall demonstrated on the target desktop. | Code present; final installation/GUI/rollback acceptance outstanding. |
+
+**Decision:** ISC is usable today in OFF/MONITOR with manual protections,
+but not a fully functioning automatic sleep controller or a production 1.0
+release. Do not rename the preview as production or make ON selectable
+without closing the two substantive blockers above. No synthetic test
+can establish hardware wake reliability. Do not silently adjust existing
+power settings or restart protected workloads to satisfy this checklist.
+
+The next work should close one of these explicit acceptance items or
+resolve a proven regression. If a hardware trial or a material GNOME
+configuration change is necessary, request the operator's specific
+approval rather than running it automatically.
+
 ## Current baseline (2026-11-09)
 
 - Source branch: `feature/isc-foundation-monitor-only`, baseline
