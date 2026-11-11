@@ -344,7 +344,18 @@ class TrayController:
                 error=True,
             )
             return
-        if result.conflict:
+        verified = (
+            result.ac_timeout == 0 and result.battery_timeout == 0
+            and result.reason == "gnome_idle_disabled"
+            if operation == "disable"
+            else (
+                not result.managed
+                and result.ac_timeout is not None
+                and result.battery_timeout is not None
+                and result.reason in ("gnome_idle_enabled", "gnome_idle_disabled")
+            )
+        )
+        if not verified:
             self._notice(
                 "GNOME power settings need review",
                 "The requested operation was not completely verified. "
