@@ -15,6 +15,9 @@ from .receiver import read_monitor_health
 from .settings import ModeConfigError, read_mode, set_mode
 from .mode_gate import resolve_mode
 from .keepawake import KeepAwakeError, KeepAwakeManager
+from .gnome_policy import (
+    GnomePolicyError, change_gnome_policy, inspect_gnome_policy,
+)
 from .native_controls import NativeControlError, open_power_settings
 from .tray import backend_probe
 
@@ -59,7 +62,7 @@ class DesktopWindow:
         self.GLib = GLib
         self._awake = KeepAwakeManager()
         self.window = Gtk.Window(title="Intelligent Sleep Controller")
-        self.window.set_default_size(650, 425)
+        self.window.set_default_size(680, 540)
         self.window.set_border_width(20)
         self.window.connect("destroy", self._close_window)
 
@@ -119,6 +122,25 @@ class DesktopWindow:
         power_help.set_xalign(0)
         power_help.set_line_wrap(True)
         content.pack_start(power_help, False, False, 0)
+        self.policy_label = Gtk.Label(label="GNOME automatic sleep: checking…")
+        self.policy_label.set_xalign(0)
+        self.policy_label.set_line_wrap(True)
+        content.pack_start(self.policy_label, False, False, 0)
+
+        power_buttons = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
+        )
+        content.pack_start(power_buttons, False, False, 0)
+        for title, operation in (
+            ("Disable GNOME Auto Sleep", "disable"),
+            ("Restore Previous GNOME Settings", "restore"),
+        ):
+            button = Gtk.Button(label=title)
+            button.connect(
+                "clicked", lambda _, name=operation: self.change_power_policy(name),
+            )
+            power_buttons.pack_start(button, False, False, 0)
+
         settings = Gtk.Button(label="Open GNOME Power Settings")
         settings.connect("clicked", lambda *_: self.open_system_power())
         content.pack_start(settings, False, False, 0)
@@ -203,6 +225,64 @@ class DesktopWindow:
                 error=True,
             )
 
+    def _confirm_power_policy(self, operation: str) -> bool:
+        """Require a second explicit UI action before touching GNOME policy."""
+        if operation not in ("disable", "restore"):
+            return False
+        title = (
+            "Disable GNOME automatic sleep on AC and battery?"
+            if operation == "disable"
+            else "Restore ISC-saved GNOME automatic sleep timeouts?"
+        )
+        detail = (
+            "This changes GNOME's automatic idle-sleep settings and saves "
+            "their current values privately for later restoration. "
+            "It does not enable ISC automatic sleep."
+            if operation == "disable"
+            else "This restores only the values previously saved by ISC. "
+                 "If GNOME settings were changed elsewhere, restoration "
+                 "will be refused rather than overwriting them."
+        )
+        dialog = self.Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=self.Gtk.DialogFlags.MODAL,
+            message_type=self.Gtk.MessageType.QUESTION,
+            buttons=self.Gtk.ButtonsType.YES_NO,
+            text=title,
+        )
+        dialog.format_secondary_text(detail)
+        try:
+            return dialog.run() == self.Gtk.ResponseType.YES
+        finally:
+            dialog.destroy()
+
+    def change_power_policy(self, operation: str) -> None:
+        """An independently confirmed change, never implied by OFF/MONITOR."""
+        if operation not in ("disable", "restore"):
+            return
+        if not self._confirm_power_policy(operation):
+            return
+        try:
+            changed = change_gnome_policy(operation, confirmed=True)
+        except GnomePolicyError:
+            self._message(
+                "GNOME power settings unchanged or incomplete",
+                "The requested change could not be verified. "
+                "Check the current policy and the saved restoration state "
+                "before trying again.",
+                error=True,
+            )
+            self.refresh()
+            return
+        if changed.conflict:
+            self._message(
+                "GNOME power coordination needs attention",
+                "The requested settings were not completely verified. "
+                "Open GNOME Power Settings to review them.",
+                error=True,
+            )
+        self.refresh()
+
     def start_tray(self) -> None:
         issues = backend_probe()
         if issues:
@@ -270,6 +350,32 @@ class DesktopWindow:
                     + " min remaining)"
                 )
             awake_label.set_text(awake_text)
+        power_label = getattr(self, "policy_label", None)
+        if power_label is not None:
+            try:
+                power = inspect_gnome_policy()
+                ac = (
+                    "unknown" if power.ac_timeout is None
+                    else str(power.ac_timeout) + "s"
+                )
+                battery = (
+                    "unknown" if power.battery_timeout is None
+                    else str(power.battery_timeout) + "s"
+                )
+                status = (
+                    "unknown or conflicting" if power.conflict
+                    else "disabled" if power.ac_timeout == power.battery_timeout == 0
+                    else "enabled"
+                )
+                power_label.set_text(
+                    "GNOME automatic idle sleep: " + status
+                    + f" (AC: {ac}; battery: {battery}). "
+                    + ("ISC has a reversible backup." if power.managed
+                       else "No ISC-managed backup.")
+                )
+            except (GnomePolicyError, OSError, ValueError):
+                power_label.set_text("GNOME automatic idle sleep: UNKNOWN.")
+
         self.status_label.set_text(
             f"Operating preference: {mode}\n"
             f"{detail}\n"
