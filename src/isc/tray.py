@@ -21,6 +21,9 @@ from .native_controls import (
     display_support, display_off, open_power_settings,
 )
 from .native_sleep import assess_native_sleep, request_native_sleep
+from .gnome_policy import (
+    GnomePolicyError, change_gnome_policy, inspect_gnome_policy,
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,10 @@ class TrayController:
         self.profiles_menu.append(self._profile_unavailable)
         self.menu.append(self.profiles_item)
         self._item("Open System Power Settings…", self._open_system_power)
+        self._item("Disable GNOME Auto Sleep…",
+                   lambda item: self._gnome_policy_change("disable"))
+        self._item("Restore GNOME Auto Sleep…",
+                   lambda item: self._gnome_policy_change("restore"))
         self._separator()
         self.awake_menu_item = Gtk.MenuItem.new_with_label("Keep Awake")
         self.awake_submenu = Gtk.Menu()
@@ -296,6 +303,55 @@ class TrayController:
         except NativeControlError as exc:
             self._notice("Unable to open GNOME Power settings", str(exc), error=True)
 
+    def _gnome_policy_change(self, operation: str) -> None:
+        """Confirmed GNOME policy change; independent of ISC OFF/MONITOR."""
+        if operation not in ("disable", "restore"):
+            return
+        Gtk = self.Gtk
+        text = (
+            "Disable GNOME automatic idle sleep on AC and battery?"
+            if operation == "disable"
+            else "Restore ISC-saved GNOME automatic idle sleep settings?"
+        )
+        explanation = (
+            "This writes GNOME's AC and battery idle-sleep timeouts. "
+            "ISC records existing values privately for later restoration. "
+            "It does not enable ISC automatic suspension."
+            if operation == "disable"
+            else "Only ISC-saved values can be restored. GNOME settings "
+                 "changed by another program will not be overwritten."
+        )
+        prompt = Gtk.MessageDialog(
+            transient_for=None, flags=Gtk.DialogFlags.MODAL,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO, text=text,
+        )
+        prompt.format_secondary_text(explanation)
+        try:
+            approved = prompt.run() == Gtk.ResponseType.YES
+        finally:
+            prompt.destroy()
+        if not approved:
+            return
+        try:
+            result = change_gnome_policy(operation, confirmed=True)
+        except GnomePolicyError:
+            self._notice(
+                "GNOME automatic sleep settings not verified",
+                "The requested operation was refused or incomplete. "
+                "Open the ISC window or GNOME Power Settings to review "
+                "the current values and restore status.",
+                error=True,
+            )
+            return
+        if result.conflict:
+            self._notice(
+                "GNOME power settings need review",
+                "The requested operation was not completely verified. "
+                "Review GNOME Power Settings before relying on it.",
+                error=True,
+            )
+
     def _display_off(self, _item):
         available, reason = display_support()
         if not available:
@@ -440,9 +496,22 @@ class TrayController:
             )
         elif health is not None:
             monitoring_detail += "\nBackground process census: UNKNOWN"
+        try:
+            power = inspect_gnome_policy()
+            if power.ac_timeout is None or power.battery_timeout is None:
+                policy_line = "GNOME idle sleep: UNKNOWN"
+            elif power.reason == "gnome_idle_disabled":
+                policy_line = "GNOME idle sleep: disabled (AC and battery)"
+            elif power.reason == "gnome_idle_enabled":
+                policy_line = "GNOME idle sleep: enabled"
+            else:
+                policy_line = "GNOME idle sleep: conflicting or incomplete"
+        except (GnomePolicyError, OSError, ValueError):
+            policy_line = "GNOME idle sleep: UNKNOWN"
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
+            f"{policy_line}\\n"
             f"OS Power Profile: {current_profile}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
