@@ -2,12 +2,15 @@ import os
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from isc.settings import ModeConfigError, ModeStatus
-from isc.tray import TraySnapshot, backend_probe, tray_snapshot, run_tray
+from isc.tray import (
+    TrayController, TraySnapshot, backend_probe, tray_snapshot, run_tray,
+)
+from isc.gnome_policy import GnomePolicyError, GnomePolicyStatus
 
 
 class TrayTests(unittest.TestCase):
@@ -57,6 +60,93 @@ class TrayTests(unittest.TestCase):
     def test_unavailable_tray_does_not_initialize_gui(self, dep, probe):
         self.assertEqual(run_tray(), 2)
         dep.assert_not_called()
+
+
+class TrayGnomePolicyTests(unittest.TestCase):
+    def _controller(self, *, approval=True):
+        controller = object.__new__(TrayController)
+        controller.Gtk = Mock()
+        controller.Gtk.ResponseType.YES = 2
+        controller.Gtk.MessageDialog.return_value.run.return_value = (
+            2 if approval else 0
+        )
+        controller._notice = Mock()
+        return controller
+
+    def test_invalid_operation_does_not_open_dialog_or_write_policy(self):
+        c = self._controller()
+        with patch("isc.tray.change_gnome_policy") as changed:
+            c._gnome_policy_change("on")
+        changed.assert_not_called()
+        c.Gtk.MessageDialog.assert_not_called()
+
+    def test_cancelled_modal_never_changes_gnome_settings(self):
+        c = self._controller(approval=False)
+        with patch("isc.tray.change_gnome_policy") as changed:
+            c._gnome_policy_change("disable")
+            c._gnome_policy_change("restore")
+        changed.assert_not_called()
+        self.assertEqual(c.Gtk.MessageDialog.call_count, 2)
+        self.assertEqual(
+            c.Gtk.MessageDialog.return_value.destroy.call_count, 2,
+        )
+
+    def test_confirmed_disable_calls_existing_reversible_api(self):
+        c = self._controller()
+        with patch("isc.tray.change_gnome_policy",
+                   return_value=GnomePolicyStatus(
+                       0, 0, True, False, "gnome_idle_disabled")) as change:
+            c._gnome_policy_change("disable")
+        change.assert_called_once_with("disable", confirmed=True)
+        c._notice.assert_not_called()
+        details = c.Gtk.MessageDialog.return_value
+        self.assertIn(
+            "AC and battery",
+            c.Gtk.MessageDialog.call_args.kwargs["text"],
+        )
+        details.format_secondary_text.assert_called()
+        details.destroy.assert_called_once()
+
+    def test_confirmed_restore_only_calls_existing_restore_path(self):
+        c = self._controller()
+        with patch("isc.tray.change_gnome_policy",
+                   return_value=GnomePolicyStatus(
+                       1800, 900, False, True, "gnome_idle_enabled")) as change:
+            c._gnome_policy_change("restore")
+        change.assert_called_once_with("restore", confirmed=True)
+        # Restored nonzero GNOME timeouts are not an ISC verification failure.
+        c._notice.assert_called_once()
+        self.assertTrue(c._notice.call_args.kwargs["error"])
+
+    def test_gnome_write_error_does_not_reveal_private_details(self):
+        c = self._controller()
+        with patch("isc.tray.change_gnome_policy",
+                   side_effect=GnomePolicyError("private user's path")):
+            c._gnome_policy_change("restore")
+        c._notice.assert_called_once()
+        self.assertNotIn("private user's path", str(c._notice.call_args))
+
+    def test_power_policy_is_not_changed_by_basic_tray_mode_selection(self):
+        c = self._controller()
+        c._refreshing = False
+        c.refresh = Mock()
+        item = Mock()
+        item.get_active.return_value = True
+        with patch("isc.tray.set_mode") as set_mode, \
+             patch("isc.tray.change_gnome_policy",
+                   side_effect=AssertionError("implicit change forbidden")):
+            c._set_mode(item, "off")
+            c._set_mode(item, "monitor")
+        self.assertEqual(set_mode.call_count, 2)
+
+    def test_unconfirmed_operation_keeps_mode_and_power_unchanged(self):
+        c = self._controller(approval=False)
+        with patch("isc.tray.set_mode",
+                   side_effect=AssertionError("mode modified")) as mode, \
+             patch("isc.tray.change_gnome_policy",
+                   side_effect=AssertionError("policy modified")):
+            c._gnome_policy_change("disable")
+        mode.assert_not_called()
 
 
 class _ProfileItemFake:
