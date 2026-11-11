@@ -216,6 +216,23 @@ and `scheduled_work_safe=False` remain. Actual Ubuntu transient-unit
 acceptance is separate from synthetic tests and must not be confused with
 authorization to arm ON.
 
+### Milestone 3 — bounded guard lifetime for controlled testing
+
+The existing-service guard now also accepts
+`isc protect-existing --for SECONDS -- USER_SERVICE.service` (1–14,400
+seconds). Its own worker uses a monotonic deadline to return normally,
+rather than requiring `timeout --signal=INT --kill-after=...`, which
+produced exit 137 in a live shell test despite the inhibitor releasing.
+The lifetime is **explicit**, not inferred from a service's CPU usage,
+systemd state, or purported application task completion. An expiry
+releases protection regardless of unfinished work and must not be
+interpreted as permission to suspend.
+
+The default without `--for` remains manual cancellation with Ctrl+C.
+Both variants leave ON disarmed and do not modify any existing service.
+A controlled live test must confirm clean worker exit and inhibitor release
+before the time-limited path is marked accepted on the target desktop.
+
 ### Milestone 3 — opt-in existing-service sleep inhibitor guard
 
 Added `isc protect-existing -- USER_SERVICE.service`, reusing the verified
