@@ -43,7 +43,10 @@ from .protected_work import run_protected_work
 from .detached_work import launch_detached_work
 from .protected_status import inspect_protected_unit
 from .existing_service_check import observe_existing_user_service
-from .existing_service_guard import start_existing_service_guard, run_existing_guard_worker
+from .existing_service_guard import (
+    start_existing_service_guard, run_existing_guard_worker,
+    valid_guard_duration,
+)
 from .native_controls import (
     NativeControlError, PROFILES, power_profiles, set_profile,
     display_support, display_off, open_power_settings,
@@ -1245,22 +1248,47 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if protection.verified else 2
 
     if incoming and incoming[0] == "protect-existing":
-        if len(incoming) != 3 or incoming[1] != "--":
-            print("Usage: isc protect-existing -- USER_SERVICE.service")
-            print("Explicit foreground native inhibitor; Ctrl+C ends protection.")
+        duration: int | None = None
+        if len(incoming) == 3 and incoming[1] == "--":
+            unit = incoming[2]
+        elif (
+            len(incoming) == 5 and incoming[1] == "--for"
+            and incoming[3] == "--"
+            and len(incoming[2]) <= 5
+            and incoming[2].isascii() and incoming[2].isdecimal()
+            and valid_guard_duration(int(incoming[2]))
+        ):
+            duration = int(incoming[2])
+            unit = incoming[4]
+        else:
+            print("Usage: isc protect-existing [--for SECONDS] -- USER_SERVICE.service")
+            print("Manual: Ctrl+C; bounded: 1–14400 seconds. Neither proves task completion.")
             return 2
-        result = start_existing_service_guard(incoming[2])
+        if duration is None:
+            result = start_existing_service_guard(unit)
+        else:
+            result = start_existing_service_guard(
+                unit, duration_seconds=duration,
+            )
         if result:
             print("Existing-service protection not started or not verified.")
             print("No existing service or power setting changed.")
         return result
 
-    # Worker is only supported under the explicit systemd-inhibit wrapper.
+    # Worker is intended only under the explicit systemd-inhibit wrapper.
     # Invoking it directly never grants a sleep-safety or inhibitor claim.
     if incoming and incoming[0] == "_existing-guard-worker":
-        if len(incoming) != 2:
-            return 2
-        return run_existing_guard_worker(incoming[1])
+        if len(incoming) == 2:
+            return run_existing_guard_worker(incoming[1])
+        if (
+            len(incoming) == 3 and len(incoming[2]) <= 5
+            and incoming[2].isascii() and incoming[2].isdecimal()
+            and valid_guard_duration(int(incoming[2]))
+        ):
+            return run_existing_guard_worker(
+                incoming[1], duration_seconds=int(incoming[2]),
+            )
+        return 2
 
     if incoming and incoming[0] == "existing-service":
         if len(incoming) != 2:
