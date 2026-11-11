@@ -511,7 +511,7 @@ class TrayController:
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
-            f"{policy_line}\\n"
+            f"{policy_line}\n"
             f"OS Power Profile: {current_profile}\n"
             f"Tray-managed monitor: {self._monitor_state}\n"
             f"Receiver socket: {'advertised' if state.receiver_advertised else 'not advertised'}\n"
