@@ -336,6 +336,19 @@ class DesktopWindowTests(unittest.TestCase):
                 controller.refresh.assert_called_once_with()
                 controller._message.assert_not_called()
 
+    def test_gnome_restore_nonzero_timeouts_is_success(self):
+        controller = object.__new__(DesktopWindow)
+        controller._confirm_power_policy = Mock(return_value=True)
+        controller.refresh = Mock()
+        controller._message = Mock()
+        with patch("isc.desktop_window.change_gnome_policy",
+                   return_value=GnomePolicyStatus(
+                       1800, 900, False, True, "gnome_idle_enabled")) as change:
+            controller.change_power_policy("restore")
+        change.assert_called_once_with("restore", confirmed=True)
+        controller._message.assert_not_called()
+        controller.refresh.assert_called_once()
+
     def test_gnome_policy_writes_never_called_on_confirmation_cancel(self):
         controller = object.__new__(DesktopWindow)
         controller.Gtk = Mock()
