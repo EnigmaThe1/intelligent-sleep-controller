@@ -368,6 +368,14 @@ and should be explicitly approved and checked on the actual machine.
 
 ### GNOME automatic-sleep policy (opt-in, reversible)
 
+**Desktop controls:** The ISC application window and existing tray now
+have **Disable GNOME Auto Sleep** and **Restore GNOME Auto Sleep**
+actions. Each presents an explicit confirmation dialog before calling
+the same reversible policy controller documented below. The window also
+shows AC and battery GNOME idle-timeout state; the tray Status dialog
+includes a concise read-only summary. Clicking ISC OFF or MONITOR
+**does not** implicitly change operating-system power settings.
+
 GNOME's own automatic idle suspend can conflict with ISC's decision. The
 following command checks its AC and battery idle-suspend timeouts **without
 changing any settings**:
