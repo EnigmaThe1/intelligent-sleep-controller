@@ -254,13 +254,30 @@ class DesktopWindowTests(unittest.TestCase):
             controller.refresh()
         preview.assert_called_once_with()
         self.assertIn(
-            "GNOME automatic idle sleep: unknown or conflicting",
+            "GNOME automatic idle sleep: enabled",
             controller.policy_label.set_text.call_args.args[0],
         )
         self.assertIn(
             "Operating preference: OFF",
             controller.status_label.set_text.call_args.args[0],
         )
+
+    def test_gnome_status_reports_external_change_without_trusting_it(self):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.policy_label = Mock()
+        with patch("isc.desktop_window.read_mode",
+                   return_value=ModeStatus("monitor", True)), \
+             patch("isc.desktop_window.read_monitor_health",
+                   return_value=None), \
+             patch("isc.desktop_window.inspect_gnome_policy",
+                   return_value=GnomePolicyStatus(
+                       1800, 0, True, True,
+                       "gnome_policy_changed_externally")):
+            controller.refresh()
+        text = controller.policy_label.set_text.call_args.args[0]
+        self.assertIn("changed outside ISC", text)
+        self.assertNotIn("disabled", text)
 
     def test_power_policy_status_displays_isc_saved_and_disabled(self):
         controller = object.__new__(DesktopWindow)
