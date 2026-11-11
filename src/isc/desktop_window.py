@@ -274,7 +274,18 @@ class DesktopWindow:
             )
             self.refresh()
             return
-        if changed.conflict:
+        verified = (
+            changed.ac_timeout == 0 and changed.battery_timeout == 0
+            and changed.reason == "gnome_idle_disabled"
+            if operation == "disable"
+            else (
+                not changed.managed
+                and changed.ac_timeout is not None
+                and changed.battery_timeout is not None
+                and changed.reason in ("gnome_idle_enabled", "gnome_idle_disabled")
+            )
+        )
+        if not verified:
             self._message(
                 "GNOME power coordination needs attention",
                 "The requested settings were not completely verified. "
