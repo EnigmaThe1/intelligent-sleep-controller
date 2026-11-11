@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from isc.existing_service_check import ExistingServiceObservation
 from isc.existing_service_guard import (
     existing_service_guard_command, start_existing_service_guard,
-    run_existing_guard_worker,
+    run_existing_guard_worker, valid_guard_duration,
 )
 from isc.cli import main
 
@@ -214,6 +214,153 @@ class ExistingServiceGuardTests(unittest.TestCase):
              redirect_stdout(StringIO()):
             self.assertEqual(main(["_existing-guard-worker", UNIT]), 0)
         worker.assert_called_once_with(UNIT)
+
+    def test_duration_limits_are_strict_and_optional(self):
+        self.assertTrue(valid_guard_duration(None))
+        for seconds in (1, 12, 14400):
+            self.assertTrue(valid_guard_duration(seconds))
+        for invalid in (0, -1, 14401, 1.5, True, False, "12", float("inf")):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(valid_guard_duration(invalid))
+                self.assertIsNone(
+                    existing_service_guard_command(
+                        UNIT, duration_seconds=invalid,
+                    )
+                )
+
+    def test_bounded_command_uses_exact_native_inhibitor_and_worker(self):
+        command = existing_service_guard_command(
+            UNIT, duration_seconds=12, python_executable="/usr/bin/python3",
+        )
+        self.assertEqual(command[:6], (
+            "/usr/bin/systemd-inhibit", "--what=idle:sleep",
+            "--mode=block", "--who=Intelligent Sleep Controller",
+            "--why=Protected foreground work", "--",
+        ))
+        self.assertEqual(command[6:], (
+            "/usr/bin/python3", "-m", "isc",
+            "_existing-guard-worker", UNIT, "12",
+        ))
+        self.assertNotIn("timeout", command)
+        self.assertNotIn("systemctl", command)
+
+    def test_bounded_guard_preflight_before_native_exec(self):
+        with patch("isc.existing_service_guard.os.execv",
+                   side_effect=OSError("native launch mocked")) as runner:
+            self.assertEqual(
+                start_existing_service_guard(
+                    UNIT, duration_seconds=12, probe=lambda _: VERIFIED,
+                ), 2,
+            )
+        self.assertEqual(runner.call_args.args[1],
+                         existing_service_guard_command(
+                             UNIT, duration_seconds=12,
+                         ))
+        runner.reset_mock()
+        self.assertEqual(
+            start_existing_service_guard(
+                UNIT, duration_seconds=12, probe=lambda _: UNKNOWN,
+            ), 2,
+        )
+        runner.assert_not_called()
+
+    def test_bounded_guard_exits_itself_at_deadline_without_signals(self):
+        marks = iter((100.0, 100.0, 103.0, 112.0))
+        waits = []
+        probes = []
+        with redirect_stdout(StringIO()) as out:
+            result = run_existing_guard_worker(
+                UNIT, duration_seconds=12,
+                probe=lambda unit: (probes.append(unit) or VERIFIED),
+                clock=lambda: next(marks),
+                wait=lambda seconds: waits.append(seconds),
+            )
+        self.assertEqual(result, 0)
+        self.assertEqual(waits, [12, 9])
+        self.assertEqual(len(probes), 3)
+        self.assertIn("Selected protection period ended", out.getvalue())
+        self.assertIn("task state UNKNOWN", out.getvalue())
+        self.assertNotIn(UNIT, out.getvalue())
+
+    def test_bounded_guard_expires_even_if_service_disappears(self):
+        marks = iter((1.0, 1.0, 5.0))
+        statuses = iter((VERIFIED, UNKNOWN))
+        with redirect_stdout(StringIO()) as out:
+            result = run_existing_guard_worker(
+                UNIT, duration_seconds=4,
+                probe=lambda _: next(statuses),
+                clock=lambda: next(marks),
+                wait=lambda seconds: None,
+            )
+        self.assertEqual(result, 0)
+        self.assertIn("UNKNOWN; KEEP PROTECTION", out.getvalue())
+        self.assertIn("Selected protection period ended", out.getvalue())
+        self.assertNotIn("work completed", out.getvalue())
+
+    def test_invalid_or_unavailable_clock_is_not_a_successful_expiry(self):
+        for clock in (
+            lambda: float("nan"),
+            lambda: float("inf"),
+            lambda: -1.0,
+            Mock(side_effect=OSError("private clock")),
+        ):
+            with self.subTest(clock=clock):
+                probe = Mock()
+                with redirect_stdout(StringIO()):
+                    self.assertEqual(run_existing_guard_worker(
+                        UNIT, duration_seconds=10,
+                        clock=clock, probe=probe,
+                    ), 2)
+                probe.assert_not_called()
+
+    def test_backward_clock_does_not_report_completion(self):
+        marks = iter((100.0, 99.0))
+        with redirect_stdout(StringIO()) as out:
+            self.assertEqual(run_existing_guard_worker(
+                UNIT, duration_seconds=10, clock=lambda: next(marks),
+                wait=Mock(side_effect=AssertionError("must not wait")),
+                probe=lambda _: VERIFIED,
+            ), 2)
+        self.assertIn("clock unavailable", out.getvalue())
+        self.assertNotIn("period ended", out.getvalue())
+
+    def test_cli_bounded_guard_requires_exact_syntax(self):
+        invalid = (
+            ["protect-existing", "--for", "0", "--", UNIT],
+            ["protect-existing", "--for", "14401", "--", UNIT],
+            ["protect-existing", "--for", "-1", "--", UNIT],
+            ["protect-existing", "--for", "12s", "--", UNIT],
+            ["protect-existing", "--for", "12", UNIT],
+            ["protect-existing", "--for", "12", "--", UNIT, "extra"],
+            ["protect-existing", "--for", "999999999999", "--", UNIT],
+            ["protect-existing", "--for", "true", "--", UNIT],
+        )
+        with patch("isc.cli.start_existing_service_guard") as runner:
+            for args in invalid:
+                with self.subTest(args=args), redirect_stdout(StringIO()):
+                    self.assertEqual(main(args), 2)
+        runner.assert_not_called()
+
+    def test_cli_bounded_guard_launches_only_with_explicit_duration(self):
+        with patch("isc.cli.start_existing_service_guard",
+                   return_value=2) as runner, redirect_stdout(StringIO()):
+            self.assertEqual(
+                main(["protect-existing", "--for", "12", "--", UNIT]), 2,
+            )
+        runner.assert_called_once_with(UNIT, duration_seconds=12)
+
+    def test_cli_bounded_worker_validates_duration_before_running(self):
+        with patch("isc.cli.run_existing_guard_worker",
+                   return_value=0) as worker:
+            self.assertEqual(
+                main(["_existing-guard-worker", UNIT, "12"]), 0,
+            )
+            worker.assert_called_once_with(UNIT, duration_seconds=12)
+            worker.reset_mock()
+            self.assertEqual(
+                main(["_existing-guard-worker", UNIT, "0"]), 2,
+            )
+            worker.assert_not_called()
 
     def test_existing_safety_check_command_remains_accessible(self):
         # Guard work must not shadow cli.check() or arm automatic suspend.
