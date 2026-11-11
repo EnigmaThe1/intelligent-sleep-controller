@@ -31,7 +31,18 @@ or restarting that service**. This requires a deliberate operator action:
 # Example only: holds an inhibitor until manually cancelled with Ctrl+C.
 # Do NOT run just to inspect a service.
 PYTHONPATH=src /usr/bin/python3 -m isc protect-existing -- example.service
+
+# Explicit time-limited guard (12 seconds), primarily for controlled tests:
+PYTHONPATH=src /usr/bin/python3 -m isc protect-existing --for 12 -- example.service
 ```
+
+For a bounded guard, ISC's own worker exits at the specified duration
+(1–14,400 seconds), letting the native wrapper release its lock normally.
+Unlike an external `timeout` wrapper, no kill escalation is needed for
+routine expiry. **The time limit does not prove the application has finished.**
+It releases the sleep blocker even if work is still running, so use it only
+when you deliberately accept that limit. For critical work with unknown
+completion time, use the manual guard or an application-owned inhibitor.
 
 The named service must first pass ISC's current user-owned service/cgroup
 membership check. Once the inhibitor wrapper has started, ISC observes the
