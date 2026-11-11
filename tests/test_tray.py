@@ -115,8 +115,7 @@ class TrayGnomePolicyTests(unittest.TestCase):
             c._gnome_policy_change("restore")
         change.assert_called_once_with("restore", confirmed=True)
         # Restored nonzero GNOME timeouts are not an ISC verification failure.
-        c._notice.assert_called_once()
-        self.assertTrue(c._notice.call_args.kwargs["error"])
+        c._notice.assert_not_called()
 
     def test_gnome_write_error_does_not_reveal_private_details(self):
         c = self._controller()
