@@ -15,6 +15,7 @@ from isc.receiver import MonitorHealth
 from isc.settings import ModeConfigError, ModeStatus
 from isc.keepawake import KeepAwakeError, KeepAwakeStatus
 from isc.native_controls import NativeControlError
+from isc.gnome_policy import GnomePolicyError, GnomePolicyStatus
 
 
 class DesktopWindowTests(unittest.TestCase):
@@ -238,6 +239,135 @@ class DesktopWindowTests(unittest.TestCase):
         controller.set_monitor_mode("off")
         setter.assert_called_once_with("off")
         opener.assert_not_called()
+
+    def test_power_policy_status_is_read_only_and_distinct_from_mode(self):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.policy_label = Mock()
+        with patch("isc.desktop_window.read_mode", return_value=ModeStatus("off", True)), \
+             patch("isc.desktop_window.read_monitor_health", return_value=None), \
+             patch("isc.desktop_window.inspect_gnome_policy", return_value=
+                   GnomePolicyStatus(1800, 900, False, True,
+                                     "gnome_idle_enabled")) as preview, \
+             patch("isc.desktop_window.change_gnome_policy",
+                   side_effect=AssertionError("no implicit write")):
+            controller.refresh()
+        preview.assert_called_once_with()
+        self.assertIn(
+            "GNOME automatic idle sleep: unknown or conflicting",
+            controller.policy_label.set_text.call_args.args[0],
+        )
+        self.assertIn(
+            "Operating preference: OFF",
+            controller.status_label.set_text.call_args.args[0],
+        )
+
+    def test_power_policy_status_displays_isc_saved_and_disabled(self):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.policy_label = Mock()
+        with patch("isc.desktop_window.read_mode", return_value=ModeStatus("monitor", True)), \
+             patch("isc.desktop_window.read_monitor_health", return_value=None), \
+             patch("isc.desktop_window.inspect_gnome_policy", return_value=
+                   GnomePolicyStatus(0, 0, True, False,
+                                     "gnome_idle_disabled")):
+            controller.refresh()
+        text = controller.policy_label.set_text.call_args.args[0]
+        self.assertIn("disabled", text)
+        self.assertIn("AC: 0s; battery: 0s", text)
+        self.assertIn("reversible backup", text)
+
+    def test_gnome_status_read_failure_fails_closed_on_display(self):
+        controller = object.__new__(DesktopWindow)
+        controller.status_label = Mock()
+        controller.policy_label = Mock()
+        with patch("isc.desktop_window.read_mode", return_value=ModeStatus("off", True)), \
+             patch("isc.desktop_window.read_monitor_health", return_value=None), \
+             patch("isc.desktop_window.inspect_gnome_policy",
+                   side_effect=GnomePolicyError("sensitive backup path")):
+            controller.refresh()
+        self.assertEqual(
+            controller.policy_label.set_text.call_args.args[0],
+            "GNOME automatic idle sleep: UNKNOWN.",
+        )
+
+    def test_power_policy_button_without_confirmation_never_writes(self):
+        controller = object.__new__(DesktopWindow)
+        controller._confirm_power_policy = Mock(return_value=False)
+        controller.refresh = Mock()
+        with patch("isc.desktop_window.change_gnome_policy") as change:
+            controller.change_power_policy("disable")
+            controller.change_power_policy("restore")
+            controller.change_power_policy("other")
+        change.assert_not_called()
+        self.assertEqual(controller._confirm_power_policy.call_count, 2)
+        controller.refresh.assert_not_called()
+
+    def test_power_policy_approved_action_uses_reversible_existing_api(self):
+        for operation in ("disable", "restore"):
+            with self.subTest(operation=operation):
+                controller = object.__new__(DesktopWindow)
+                controller._confirm_power_policy = Mock(return_value=True)
+                controller.refresh = Mock()
+                controller._message = Mock()
+                with patch("isc.desktop_window.change_gnome_policy",
+                           return_value=GnomePolicyStatus(
+                               0, 0, operation == "disable", False,
+                               "gnome_idle_disabled")) as change:
+                    controller.change_power_policy(operation)
+                change.assert_called_once_with(operation, confirmed=True)
+                controller.refresh.assert_called_once_with()
+                controller._message.assert_not_called()
+
+    def test_gnome_policy_writes_never_called_on_confirmation_cancel(self):
+        controller = object.__new__(DesktopWindow)
+        controller.Gtk = Mock()
+        controller.window = Mock()
+        controller.Gtk.MessageDialog.return_value.run.return_value = 0
+        controller.Gtk.ResponseType.YES = 1
+        with patch("isc.desktop_window.change_gnome_policy") as change:
+            controller.change_power_policy("disable")
+        change.assert_not_called()
+        controller.Gtk.MessageDialog.return_value.destroy.assert_called_once()
+
+    def test_gnome_policy_confirmation_dialog_yes_and_cleanup(self):
+        controller = object.__new__(DesktopWindow)
+        controller.Gtk = Mock()
+        controller.window = Mock()
+        controller.Gtk.MessageDialog.return_value.run.return_value = 1
+        controller.Gtk.ResponseType.YES = 1
+        self.assertTrue(controller._confirm_power_policy("disable"))
+        controller.Gtk.MessageDialog.return_value.destroy.assert_called_once()
+        title = controller.Gtk.MessageDialog.call_args.kwargs["text"]
+        self.assertIn("AC and battery", title)
+        controller.Gtk.MessageDialog.return_value.format_secondary_text.assert_called()
+        self.assertFalse(controller._confirm_power_policy("bad-input"))
+
+    def test_gnome_policy_change_failure_stays_visible_and_redacted(self):
+        controller = object.__new__(DesktopWindow)
+        controller._confirm_power_policy = Mock(return_value=True)
+        controller.refresh = Mock()
+        controller._message = Mock()
+        with patch("isc.desktop_window.change_gnome_policy",
+                   side_effect=GnomePolicyError("private file metadata")) as change:
+            controller.change_power_policy("restore")
+        change.assert_called_once_with("restore", confirmed=True)
+        controller._message.assert_called_once()
+        self.assertTrue(controller._message.call_args.kwargs["error"])
+        self.assertNotIn("private file metadata", str(controller._message.call_args))
+        controller.refresh.assert_called_once()
+
+    def test_gnome_policy_conflict_after_change_warns_operator(self):
+        controller = object.__new__(DesktopWindow)
+        controller._confirm_power_policy = Mock(return_value=True)
+        controller.refresh = Mock()
+        controller._message = Mock()
+        with patch("isc.desktop_window.change_gnome_policy",
+                   return_value=GnomePolicyStatus(
+                       0, 3600, True, True, "gnome_policy_incomplete")):
+            controller.change_power_policy("disable")
+        controller._message.assert_called_once()
+        controller.refresh.assert_called_once()
 
     def test_window_shutdown_closes_owned_keepawake(self):
         controller = object.__new__(DesktopWindow)
