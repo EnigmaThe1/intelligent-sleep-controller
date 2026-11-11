@@ -362,11 +362,19 @@ class DesktopWindow:
                     "unknown" if power.battery_timeout is None
                     else str(power.battery_timeout) + "s"
                 )
-                status = (
-                    "unknown or conflicting" if power.conflict
-                    else "disabled" if power.ac_timeout == power.battery_timeout == 0
-                    else "enabled"
-                )
+                if (power.ac_timeout is None or power.battery_timeout is None
+                        or power.reason in (
+                            "backup_unverified", "gnome_policy_unverified",
+                        )):
+                    status = "unknown"
+                elif power.reason == "gnome_policy_changed_externally":
+                    status = "changed outside ISC"
+                elif power.reason == "gnome_policy_incomplete":
+                    status = "partially changed; review required"
+                elif power.ac_timeout == power.battery_timeout == 0:
+                    status = "disabled"
+                else:
+                    status = "enabled"
                 power_label.set_text(
                     "GNOME automatic idle sleep: " + status
                     + f" (AC: {ac}; battery: {battery}). "
