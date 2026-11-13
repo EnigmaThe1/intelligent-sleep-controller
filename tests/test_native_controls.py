@@ -83,7 +83,7 @@ class NativeControlsTests(unittest.TestCase):
     })
     @patch("isc.native_controls._run")
     def test_wayland_mutter_power_save_readonly_supported_on_user_desktop(self, run):
-        run.return_value = SimpleNamespace(returncode=0, stdout="i 0\\n")
+        run.return_value = SimpleNamespace(returncode=0, stdout="i 0\n")
         self.assertEqual(
             display_support(), (True, "wayland_mutter_standby_available"),
         )
@@ -97,7 +97,7 @@ class NativeControlsTests(unittest.TestCase):
     })
     @patch("isc.native_controls._run")
     def test_wayland_rejects_unknown_or_non_on_display_status(self, run):
-        for output in ("i -1\\n", "i 1\\n", "i 3\\n", "bad", "i 22\\n"):
+        for output in ("i -1\n", "i 1\n", "i 3\n", "bad", "i 22\n"):
             with self.subTest(output=output):
                 run.return_value = SimpleNamespace(
                     returncode=0, stdout=output,
@@ -124,10 +124,10 @@ class NativeControlsTests(unittest.TestCase):
         self, token, run,
     ):
         run.side_effect = [
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=0, stdout=""),
-            SimpleNamespace(returncode=0, stdout="active\\n"),
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=0, stdout=""),
         ]
         self.assertEqual(
@@ -160,7 +160,7 @@ class NativeControlsTests(unittest.TestCase):
     @patch("isc.native_controls._run")
     def test_no_wayland_standby_when_recovery_timer_cannot_be_started(self, run):
         run.side_effect = [
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=1, stdout=""),
         ]
         with self.assertRaisesRegex(NativeControlError,
@@ -178,9 +178,9 @@ class NativeControlsTests(unittest.TestCase):
     @patch("isc.native_controls._run")
     def test_no_wayland_standby_when_recovery_timer_is_not_active(self, run):
         run.side_effect = [
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=0, stdout=""),
-            SimpleNamespace(returncode=3, stdout="inactive\\n"),
+            SimpleNamespace(returncode=3, stdout="inactive\n"),
         ]
         with self.assertRaisesRegex(NativeControlError,
                                     "wayland_recovery_timer_unavailable"):
@@ -193,10 +193,10 @@ class NativeControlsTests(unittest.TestCase):
     @patch("isc.native_controls._run")
     def test_no_wayland_standby_if_screen_mode_changes_after_timer(self, run):
         run.side_effect = [
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=0, stdout=""),
-            SimpleNamespace(returncode=0, stdout="active\\n"),
-            SimpleNamespace(returncode=0, stdout="i 1\\n"),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0, stdout="i 1\n"),
         ]
         with self.assertRaisesRegex(NativeControlError,
                                     "mutter_display_changed_before_standby"):
@@ -217,10 +217,10 @@ class NativeControlsTests(unittest.TestCase):
     @patch("isc.native_controls._run")
     def test_wayland_reports_native_standby_failure(self, run):
         run.side_effect = [
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=0, stdout=""),
-            SimpleNamespace(returncode=0, stdout="active\\n"),
-            SimpleNamespace(returncode=0, stdout="i 0\\n"),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0, stdout="i 0\n"),
             SimpleNamespace(returncode=1, stdout=""),
         ]
         with self.assertRaisesRegex(NativeControlError,
