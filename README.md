@@ -467,8 +467,8 @@ separate power daemon. Everything can be accessed from both the tray and CLI.
 | --- | --- | --- |
 | Show currently active/available power profiles | \`isc power-profiles\` | \`powerprofilesctl list/get\` |
 | Select a supported performance mode | \`isc power-profiles --profile power-saver\` | \`powerprofilesctl set\` |
-| Check display-only sleep support | \`isc display-off\` | X11 DPMS query |
-| Turn off monitor images (PC keeps running) | \`isc display-off --confirm\` | \`xset dpms force off\` |
+| Check display-only sleep support | \`isc display-off\` | X11 DPMS or GNOME Wayland Mutter state query |
+| Turn off monitor images (PC keeps running) | \`isc display-off --confirm\` | X11 \`xset\` or GNOME Wayland Mutter (20-second restore timer) |
 | Open the original GNOME power settings | \`isc power-settings\` | \`gnome-control-center power\` |
 | Preview native Hibernate | \`isc hibernate\` | logind \`CanHibernate\` |
 | Preview native Hybrid Sleep | \`isc hybrid-sleep\` | logind \`CanHybridSleep\` |
@@ -481,12 +481,34 @@ The OS remains the final authority, including authorization and inhibitors.
 A capability of \`yes\` does **not** prove that hibernate/resume will work on
 this machine; actual hardware testing is a separate, user-controlled step.
 
-**Turn Off Displays** is supported only in an Xorg desktop with X11 DPMS
-enabled. It requests a low-power state for connected monitors; it does *not*
-suspend the computer, stop ongoing processing, change system sleep settings,
-or guarantee that the displays remain off when input devices move. Moving
-the mouse or pressing a key normally wakes the screens. Wayland is reported
-as unsupported rather than invoking X11 tools incorrectly.
+**Turn Off Displays** uses X11 DPMS on Xorg and the GNOME Mutter
+`PowerSaveMode=1` (standby) on GNOME Wayland. It never powers down the
+computer, stops processing, or requests system suspend.
+
+On Xorg, keyboard or mouse activity normally restores the displays.
+On GNOME Wayland, the compositor's direct power-state property is not
+guaranteed to wake from input on every driver/monitor combination.
+**ISC first arms a separate 20-second systemd --user recovery timer** that
+will request `PowerSaveMode=0` (on) even if the ISC tray exits. If the
+recovery timer cannot be armed and verified active, no Wayland standby
+request is made. The tray warns about the temporary black-screen risk
+before presenting the explicit action. Recovery is an attempted native
+power-state request, not a guarantee against a hung GPU or compositor.
+Only use this bounded Wayland option as a controlled hardware acceptance
+test until reliable input-driven wake is independently verified. Repeated
+requests may cause an earlier restore timer to wake the screen sooner.
+
+Recovery by the operator, if the monitor remains dark but a shell/SSH
+session is available:
+
+```bash
+busctl --user set-property org.gnome.Mutter.DisplayConfig \
+  /org/gnome/Mutter/DisplayConfig org.gnome.Mutter.DisplayConfig \
+  PowerSaveMode i 0
+```
+
+Never run that recovery command as an automatic/background loop; it is
+for an already responsive, user-owned GNOME session only.
 
 A power profile is displayed or offered only if the local power-profile
 service actually provides it. ISC does not install or impersonate that
