@@ -863,11 +863,16 @@ def display_off_cli(*, confirmed: bool) -> int:
     supported, reason = display_support()
     print("Display-only power: " + reason)
     if not supported:
-        print("No change made; X11 DPMS is not available in this session.")
+        print("No change made; display standby is not verified in this session.")
         return 2
     if not confirmed:
-        print("PREVIEW ONLY. Use display-off --confirm to turn off the image.")
-        print("The computer continues working; keyboard or mouse activity can wake the display.")
+        print("PREVIEW ONLY. Use display-off --confirm for an explicit action.")
+        if reason == "wayland_mutter_standby_available":
+            print("GNOME Wayland: 20-second recovery timer is required before standby.")
+            print("Mouse/keyboard may not wake the displays; recovery is best-effort.")
+        else:
+            print("X11: keyboard or mouse normally wakes the displays.")
+        print("The computer and background workloads remain running.")
         return 0
     try:
         display_off(confirm=True)
