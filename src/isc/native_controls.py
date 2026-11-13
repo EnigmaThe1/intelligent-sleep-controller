@@ -75,7 +75,7 @@ def _mutter_display_mode():
     result = _run(["busctl", "--user", "get-property", *_MUTTER_PROPERTY])
     if result.returncode:
         return None
-    match = re.fullmatch(r"i (-?\\d+)\\s*", result.stdout)
+    match = re.fullmatch(r"i (-?\d+)\s*", result.stdout)
     if match is None:
         return None
     value = int(match.group(1))
@@ -107,7 +107,7 @@ def display_support():
         result = _run(["xset", "q"])
     except NativeControlError:
         return False, "xset_unavailable"
-    if result.returncode or not re.search(r"(?m)^\\s*DPMS is Enabled\\s*$", result.stdout):
+    if result.returncode or not re.search(r"(?m)^\s*DPMS is Enabled\s*$", result.stdout):
         return False, "dpms_not_available"
     return True, "x11_dpms_available"
 
