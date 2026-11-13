@@ -148,6 +148,69 @@ class TrayGnomePolicyTests(unittest.TestCase):
         mode.assert_not_called()
 
 
+class TrayDisplayStandbyTests(unittest.TestCase):
+    def _controller(self, *, approval=False):
+        from isc.tray import TrayController
+        controller = object.__new__(TrayController)
+        controller.Gtk = Mock()
+        controller.Gtk.ResponseType.OK = 1
+        controller.Gtk.MessageDialog.return_value.run.return_value = (
+            1 if approval else 0
+        )
+        controller._notice = Mock()
+        return controller
+
+    def test_wayland_warning_explains_temporary_recovery_before_any_write(self):
+        c = self._controller()
+        with patch("isc.tray.display_support",
+                   return_value=(True, "wayland_mutter_standby_available")), \
+             patch("isc.tray.display_off") as power:
+            c._display_off(None)
+        power.assert_not_called()
+        text = c.Gtk.MessageDialog.call_args.kwargs["text"]
+        self.assertIn("20 seconds", text)
+        explanation = c.Gtk.MessageDialog.return_value.format_secondary_text.call_args.args[0]
+        self.assertIn("20-second", explanation)
+        self.assertIn("may NOT wake", explanation)
+        self.assertIn("workloads will continue", explanation)
+        c.Gtk.MessageDialog.return_value.destroy.assert_called_once()
+
+    def test_confirmed_wayland_standby_still_uses_guarded_native_function(self):
+        c = self._controller(approval=True)
+        with patch("isc.tray.display_support",
+                   return_value=(True, "wayland_mutter_standby_available")), \
+             patch("isc.tray.display_off",
+                   return_value="display_standby_requested_with_20s_recovery") as power:
+            c._display_off(None)
+        power.assert_called_once_with(confirm=True)
+
+    def test_x11_standby_keeps_existing_user_confirmation(self):
+        c = self._controller()
+        with patch("isc.tray.display_support",
+                   return_value=(True, "x11_dpms_available")), \
+             patch("isc.tray.display_off") as power:
+            c._display_off(None)
+        power.assert_not_called()
+        self.assertIn(
+            "standby",
+            c.Gtk.MessageDialog.call_args.kwargs["text"],
+        )
+        self.assertNotIn(
+            "20 seconds",
+            c.Gtk.MessageDialog.call_args.kwargs["text"],
+        )
+
+    def test_unsupported_display_rejected_without_modal_or_write(self):
+        c = self._controller()
+        with patch("isc.tray.display_support",
+                   return_value=(False, "mutter_display_unavailable")), \
+             patch("isc.tray.display_off") as power:
+            c._display_off(None)
+        power.assert_not_called()
+        c.Gtk.MessageDialog.assert_not_called()
+        c._notice.assert_called_once()
+
+
 class _ProfileItemFake:
     def __init__(self, label):
         self._label = label
