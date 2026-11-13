@@ -367,22 +367,34 @@ class TrayController:
         available, reason = display_support()
         if not available:
             self._notice(
-                "Display-only sleep unavailable",
-                reason + ". This version supports Xorg DPMS only.",
+                "Display standby unavailable",
+                reason + ". ISC could not verify a supported display-power API.",
                 error=True,
             )
             return
         Gtk = self.Gtk
+        is_wayland = reason == "wayland_mutter_standby_available"
         prompt = Gtk.MessageDialog(
             transient_for=None, flags=Gtk.DialogFlags.MODAL,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.NONE,
-            text="Turn off the monitor images?",
+            text=(
+                "Try GNOME Wayland monitor standby for 20 seconds?"
+                if is_wayland else "Put the monitors into standby?"
+            ),
         )
         prompt.format_secondary_text(
-            "Only the displays will enter low-power mode. "
-            "The computer and background tasks keep running. "
-            "Keyboard or mouse activity normally wakes the displays."
+            (
+                "ISC will first schedule an independent 20-second "
+                "display recovery through systemd. Keyboard/mouse input "
+                "may NOT wake displays on all GNOME/NVIDIA hardware. "
+                "Keep the computer running; its workloads will continue. "
+                "Only try this if temporary black screens are acceptable."
+            ) if is_wayland else (
+                "Only the displays will enter low-power mode. "
+                "The computer and background tasks keep running. "
+                "Keyboard or mouse activity normally wakes the displays."
+            )
         )
         prompt.add_button("Cancel", Gtk.ResponseType.CANCEL)
         prompt.add_button("Turn Off Displays", Gtk.ResponseType.OK)
