@@ -286,7 +286,7 @@ class DesktopWindowTests(unittest.TestCase):
                    side_effect=AssertionError("inapplicable GNOME policy")):
             controller.refresh()
         self.assertIn(
-            "not applicable",
+            "use this desktop’s Power Settings",
             controller.policy_label.set_text.call_args.args[0],
         )
 
