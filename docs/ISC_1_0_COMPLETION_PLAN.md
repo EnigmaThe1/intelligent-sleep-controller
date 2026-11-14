@@ -1,0 +1,378 @@
+# ISC 1.0 — Four-milestone completion contract
+
+**Scope frozen.** ISC is a small, independent, local-first Linux desktop
+utility, not an event-observability platform. This document supersedes the
+Step 99 experimental development sequence as the active delivery priority.
+Existing experimental probes stay available for diagnostics only. No new
+D-Bus protocol layer or monitoring subsystem is authorised unless a
+concrete release-blocking defect demonstrates a need.
+
+## Version 1.0 definition of done
+
+ISC must provide a persistent **OFF / MONITOR / ON** control, an
+easy-to-use tray/launcher and **Keep Awake**, with conservative,
+explainable decisions. It must not interrupt active development work,
+including detached child work and scheduled tasks. It must not depend
+on Pandora, OpenClaw, credentials, tokens, hosted services or proprietary
+agent infrastructure.
+
+OFF: ISC never automatically requests sleep; it must also own or
+safely neutralise conflicting GNOME automatic suspend settings without
+overriding administrator policy, and restore changes on exit/uninstall.
+MONITOR: full observation and reasons, no automatic power actions.
+ON: requires a fresh, complete and trustworthy workload/wake assessment,
+verified user inactivity, checked inhibitors, deliberate opt-in,
+last-moment revalidation and a reliable hardware sleep/resume path.
+Missing information always blocks sleep, never silently downgrades safety.
+
+## The four delivery milestones
+
+| Milestone | Required implementation | Exit test |
+| --- | --- | --- |
+| **1 — Consolidate** | Stabilise OFF/MONITOR, tray, Keep Awake; specify one shared mode state machine and compact diagnostic decision path; remove duplicate critical paths from release scope. | Mode persists across reboot; invalid settings fail to OFF; the app is usable without shell commands; no power action. |
+| **2 — Safe automatic execution** | Add the native auto-suspend request behind an explicit ON mode gate, fresh systemd/logind/GNOME checks, current-user idle threshold, immediately repeated policy assessment, and cancellation on mode change. Initially ship **disarmed**, with ON unavailable until release gates pass. | Synthetic tests prove all missing, stale, active, inhibited, changed-mode and unknown states cannot invoke suspend. No real suspend in CI. |
+| **3 — Minimum trusted work protection** | Reuse existing process/cgroup/invocation, inhibitor, scheduled-service and agent-hook evidence. Define a finite set of supported/unsupported workloads and a deterministic fail-closed unknown classification; do not introduce a monitoring platform. | Test active build/AI task, detached child, external wait, scheduled work, failed hooks and stale samples. Every unverified case blocks sleep. |
+| **4 — Hardware verification & release** | Test suspend/resume, multi-monitor recovery, task persistence and controlled trial on non-critical hardware; verify installation, OFF enforcement, Keep Awake and clean uninstall/rollback. | Explicit operator approval for hardware trials; repeated reliable wake/recovery and no lost work. Release 1.0 only after all gates are green. |
+
+### Cross-desktop power backend selection (2026-11-14)
+
+A single side-effect-free resolver now distinguishes X11/Xorg from
+Wayland and identifies GNOME versus KDE Plasma without relying on a
+specific computer model, GPU vendor, monitor brand or Linux distribution.
+Display standby selects only confirmed native backends: X11 DPMS,
+GNOME Wayland Mutter or KDE Wayland KScreen. The last two require
+independently active, separately scheduled 20-second systemd recovery
+timers *before* the standby request. Unknown desktop/session, missing
+KScreen, unverified output state and failed recovery all block the action.
+
+The same desktop identity is used to select GNOME versus KDE native Power
+Settings, and to disable GNOME-specific idle-policy buttons on non-GNOME
+desktop environments. This does not enable automatic computer suspension
+or alter Keep Awake, systemd/logind, the persistent OFF/MONITOR preference
+or generic OS power-profile handling.
+
+Scope limit: do not add further compositor implementations to release 1.0
+without a verified native capability and an equally scoped recovery path.
+KDE standby is validated synthetically in CI; live KDE hardware wake
+acceptance is still outstanding, just as GNOME Wayland wake recovery
+must be tested cautiously on affected hardware.
+
+## Release closeout — no further diagnostic expansion (2026-11-11)
+
+This is a **shipping plan**, not an open-ended research backlog.
+Do not add more process scanners, lifecycle observer variants, or native
+protocol layers to satisfy arbitrary test-count targets. Existing ISC
+diagnostics are sufficient for the current release decision.
+
+| Release requirement | Acceptance condition | State |
+| --- | --- | --- |
+| User controls | Installed GTK window and tray operate persistent OFF/MONITOR, Keep Awake and explicitly confirmed reversible GNOME idle-sleep control. | Implemented in source; desktop GUI acceptance still required. |
+| Native protection | Explicit foreground, detached and existing user-service guards acquire and release their Linux inhibitors without modifying original services. | Live guard acquisition and release demonstrated; scoped protection only. |
+| Actual intelligent ON | Reliable independent-work ownership/completion and scheduled wake coverage; all unknown work blocks the automatic decision. | **BLOCKED — currently unavailable by design.** |
+| Hardware readiness | Controlled multi-monitor suspend/resume and active-work preservation checks on supported hardware. | **BLOCKED — operator approval and successful hardware tests required.** |
+| Release package | Supported Ubuntu install/launch, persistent settings, optional systemd service, rollback and clean uninstall demonstrated on the target desktop. | Code present; final installation/GUI/rollback acceptance outstanding. |
+
+**Decision:** ISC is usable today in OFF/MONITOR with manual protections,
+but not a fully functioning automatic sleep controller or a production 1.0
+release. Do not rename the preview as production or make ON selectable
+without closing the two substantive blockers above. No synthetic test
+can establish hardware wake reliability. Do not silently adjust existing
+power settings or restart protected workloads to satisfy this checklist.
+
+The next work should close one of these explicit acceptance items or
+resolve a proven regression. If a hardware trial or a material GNOME
+configuration change is necessary, request the operator's specific
+approval rather than running it automatically.
+
+## Current baseline (2026-11-09)
+
+- Source branch: `feature/isc-foundation-monitor-only`, baseline
+  `c006d3768a204048b630a659ee2b8337e3050f50`.
+- 905/905 regression tests passed locally; `isc-monitor.service` active.
+- OFF/MONITOR persistent selection, GNOME idle, manual suspend preview,
+  Keep Awake and native inhibitors already exist.
+- `settings.py` explicitly refuses ON; `supervisor.py` is MONITOR-only.
+- `manual_power.py` has interactive native suspend with inhibitor checks.
+  **Do not reuse its manual confirmation bypass for automatic execution.**
+- `policy.py` defaults incomplete workload and scheduled-work evidence to
+  unsafe; the latest live check still reports three unverified processes.
+- Desktop suspend/resume has previously failed to restore displays
+  reliably. **No unattended sleep on this host until that is resolved.**
+- Experimental Step 97–99j D-Bus work is frozen, not deleted.
+
+## Scope control and acceptance
+
+A release milestone must deliver a user-observable outcome and a concise
+test report, not another numbered isolated diagnostic. Fix release-blocking
+bugs in the existing components. Keep tests relevant, without setting a
+numeric test-count target. Do not remove existing user data, untracked
+files, settings, active monitor service, or GNOME configuration as part
+of development.
+
+The four milestones are delivery categories, not a claim that automatic
+suspend can safely be enabled after four commits. A failed acceptance gate
+remains a blocker, not a reason to conceal the unknown. No suspend/wake
+action is performed as part of continuous integration.
+
+## Delivery progress (2026-11-09)
+
+- **Milestone 1 — core-mode consolidation:** shared `mode_gate.py` now
+  governs the systemd user supervisor, foreground MONITOR receiver, tray
+  runtime and tray status. OFF/MONITOR remain persistent and invalid ON
+  preferences stop monitoring without requesting power actions. Keep Awake
+  remains independent. Core integration is implemented; full desktop/boot
+  acceptance and conflicting GNOME auto-suspend settings still require
+  release validation.
+- **Milestone 2 — guarded execution path:** `auto_suspend.py` now contains
+  a real one-shot native-request decision flow: persistently armed ON
+  state, a trusted complete policy snapshot, native capability/inhibitor
+  preflight, a second safety snapshot, final unchanged mode check and
+  guarded native submission. Tests use injected synthetic evidence and
+  a fake submission; **no actual suspend occurs in CI**.
+- **Still disarmed:** the shipped `mode_gate.py` explicitly refuses ON;
+  `manual_power.assess_manual_suspend()` explicitly does not verify
+  workload coverage; the real snapshot provider is not yet trusted.
+  Releasing ON requires Milestone 3 workload evidence, race-safe mode
+  transitions and Milestone 4 hardware wake verification. No one should
+  interpret the new execution code as permission to auto-suspend.
+
+### Milestone 3 integration progress
+
+`host_safety.py` now supplies the same read-only, conservative
+`Snapshot` composition to the user-facing `isc check` command and
+the disarmed automatic-suspend executor. It uses existing GNOME idle,
+GNOME session inhibitor, logind inhibitor, session census and /proc
+candidate readers. Candidate process identities are replaced by ordinal
+labels; unreadable/missing process information remains UNKNOWN.
+Even when all current probes respond successfully, complete application
+and scheduler/wake coverage is **not verified**, so the native system
+cannot be automatically suspended.
+
+This is an integration of existing readers, not a new monitoring system.
+Remaining Milestone 3 work must establish a finite, actually trustworthy
+workload/wake criterion on supported Linux setups. Until that exists,
+`coverage_complete=False` and `scheduled_work_safe=False` must not
+be lifted to manufacture a successful ON decision.
+
+### Native preflight consolidation
+
+Automatic ON eligibility now uses a dedicated read-only
+`assess_auto_native_suspend()` which reuses the existing logind
+`CanSuspend` and `ListInhibitors` readers. It refuses permission
+challenges, unavailable capabilities, sleep/idle block and delay locks,
+unrecognised replies and missing inhibitor inventories.
+
+The earlier implementation passed through the *manual* suspend
+preflight, which always reported workload coverage unverified and was
+designed for deliberate human confirmation. The automatic path no
+longer relies on that manual exception or its coverage flag. Instead,
+it independently requires the complete live `Snapshot` policy,
+and retains the final-mode and final-snapshot checks before any native
+request. The shipped ON gate is still **disarmed**.
+
+No native readiness result grants workload coverage or wake-safety
+authority. Hardware sleep/wake validation and scheduler coverage
+remain release blockers.
+
+### Dedicated final automatic submission
+
+The automatic executor no longer calls the human-confirmed manual suspend
+submission helper. A dedicated `submit_automatic_native()` performs a
+last-moment check of the **real saved mode** (not test-injected modes),
+existing complete host snapshot and native logind inhibitors before issuing
+the fixed, inhibitor-respecting systemd command. A second mode and workload
+check aborts if the operator changes settings or work resumes. This function
+is not exposed as a user command and ON remains unavailable.
+
+The release is **not armed**: trustworthy comprehensive scheduler/workload
+coverage, atomic OFF transitions at the suspend decision boundary, and
+verified hardware resume behaviour are still required. A positive native
+capability check is necessary but insufficient.
+
+### Milestone 1 — main-window Keep Awake completed in code
+
+The main GNOME application window now exposes temporary and indefinite
+Keep Awake controls with cancellation and live status, reusing the
+existing verified `KeepAwakeManager`. This removes reliance on the
+optional tray for ordinary user operation. Each window owns only its own
+inhibitor and releases it when closed. No inhibitor starts automatically,
+and OFF/MONITOR/ON semantics remain unchanged.
+
+The GUI now states explicitly that **OFF currently disables ISC automatic
+sleep only**. GNOME's independent automatic sleep settings are not silently
+changed: a user-clicked shortcut opens GNOME Power Settings, using the
+existing native launcher. The tray OFF label uses the same limited claim.
+This avoids misleading users while maintaining reversible, explicit OS
+power preferences.
+
+Desktop GUI acceptance, reboot persistence of OFF/MONITOR, and an
+authorised reversible approach to GNOME automatic-suspend conflicts
+remain Milestone 1 release checks.
+Hardware automatic suspend is still disarmed.
+
+### Milestone 2 — ordered final OFF/dispatch boundary
+
+The automatic native request now acquires the **same private settings lock**
+as mode changes and re-reads the saved preference under that lock. Busy,
+missing or unsafe locks fail closed. Concurrent native requests cannot be
+issued through the guard. The native systemctl request has a **3-second**
+maximum wait rather than holding up an OFF selection for 20 seconds;
+timeout is reported as **outcome unknown**, never as proved rejection.
+Even an apparently idempotent OFF update must acquire the writer lock:
+a stale early return could otherwise lose a requested OFF transition.
+
+This establishes an ordering guarantee for ISC-controlled transitions:
+if OFF is committed first, a later ISC automatic request cannot dispatch.
+If a native suspend was accepted first, a subsequent OFF cannot recall that
+operating-system request. Synthetic concurrency and submission tests
+exercise this boundary without issuing a real power command.
+
+**Still disarmed:** This does not certify complete workload evidence,
+scheduled-job/wake safety, GNOME auto-sleep coordination, or reliable
+hardware resume. These remain release-critical prerequisites.
+
+### Milestone 1 — reversible GNOME idle-sleep coordination
+
+Added a deliberately opt-in GNOME power-policy controller. A read-only
+`isc gnome-policy` shows both AC/battery GNOME idle timeout settings.
+Separately confirmed disable/restore operations use only fixed
+`gsettings` schema keys, save original values in a private durable backup
+**before** any modifications, verify every write, and retain recovery state
+on partial failures. An unexpected external change is not overwritten.
+
+**No GNOME settings have been changed by development or CI.** ISC mode
+changes, tray startup and application-window actions do not automatically
+run this controller. The user's further authorisation is required before
+actually changing the host's power settings. Full automatic ownership
+across boot, session exit and uninstall is still a Milestone 1 release gate.
+On a desktop with unstable resume, nothing here enables unattended sleep.
+
+### Milestone 3 — opt-in protected detached user jobs
+
+Added `isc protect-detached -- COMMAND [ARGS...]`, a practical operator-only
+path for **new** work that needs to survive closing its terminal. It starts a
+transient systemd **user** service via `systemd-run --collect --service-type=exec`
+with the established native `systemd-inhibit --what=idle:sleep --mode=block`
+wrapper. ISC does not install or modify existing timer/service units, and
+the new command does not run from the automatic sleep pipeline.
+
+Systemd's successful exec establishes that the wrapper started; it is not
+proof that the inhibitor remains held. ISC deliberately reports
+`service_started_inhibitor_unverified`. The job's arguments may appear in
+systemd metadata/journal, so sensitive parameters must not be supplied.
+Terminal environment is not automatically inherited by transient services.
+No completion of unrelated jobs is inferred; `coverage_complete=False`
+and `scheduled_work_safe=False` remain. Actual Ubuntu transient-unit
+acceptance is separate from synthetic tests and must not be confused with
+authorization to arm ON.
+
+### Milestone 3 — bounded guard lifetime for controlled testing
+
+The existing-service guard now also accepts
+`isc protect-existing --for SECONDS -- USER_SERVICE.service` (1–14,400
+seconds). Its own worker uses a monotonic deadline to return normally,
+rather than requiring `timeout --signal=INT --kill-after=...`, which
+produced exit 137 in a live shell test despite the inhibitor releasing.
+The lifetime is **explicit**, not inferred from a service's CPU usage,
+systemd state, or purported application task completion. An expiry
+releases protection regardless of unfinished work and must not be
+interpreted as permission to suspend.
+
+The default without `--for` remains manual cancellation with Ctrl+C.
+Both variants leave ON disarmed and do not modify any existing service.
+A controlled live test must confirm clean worker exit and inhibitor release
+before the time-limited path is marked accepted on the target desktop.
+
+### Milestone 3 — opt-in existing-service sleep inhibitor guard
+
+Added `isc protect-existing -- USER_SERVICE.service`, reusing the verified
+same-user native membership check as a preflight and the existing
+`systemd-inhibit --what=idle:sleep --mode=block` native protection.
+It runs separately from the original service: it does **not** rewrite
+units, restart processes, enable GNOME automatic sleep or arm ISC ON.
+The guard observes the service periodically but holds its own inhibitor
+until explicitly cancelled. Missing service information or vanished PIDs
+**never** silently release it: a service stopping does not prove detached
+or application-level work has completed.
+
+This gives the operator a practical way to temporarily protect a known
+existing service without touching it. The guard can consume power
+indefinitely and releases protection when its own process exits (including
+unexpected failure). It is a manual guard, not complete independent-work
+authentication or coverage. There is no automatic lifecycle enrollment,
+no claim of verified task completion, and `coverage_complete=False`
+and `scheduled_work_safe=False` remain unchanged. Tests mock native exec
+and never acquire real inhibitors or suspend the host.
+
+### Milestone 3 — read-only existing-service verification
+
+The operator command `isc existing-service USER_SERVICE.service` joins
+pre-existing systemd-origin MainPID/invocation/cgroup verification with the
+bounded double-sampled cgroup-v2 subtree reader. It checks that the *same*
+user service activation and kernel process identity remain observed before
+and after the process census. Race, owner mismatch, missing procfs/cgroup
+data, unsupported system-scoped identity, and empty subtree all return
+UNKNOWN. No services are modified, restarted or stopped.
+
+The result is an aggregate process count and a strict *momentary membership*
+observation only. It must not be promoted to a task-state assertion:
+CPU waiting, child detachment outside the cgroup, model/network waits,
+independent job ownership and wake completion remain unverified. No
+per-service result upgrades `coverage_complete` or
+`scheduled_work_safe` and ON remains unavailable. A user-owned service
+can be inspected without disclosing private service details in ISC output.
+
+### Milestone 3 — systemd evidence used by the safety decision
+
+The shared `host_safety.compose_host_snapshot` and the operator-visible
+`isc check` now consume the **existing** `read_scheduled_work()`
+systemd timer/service census. A small pure classifier records waiting
+timers (wake safety unknown), running or transitioning user/system services
+(task state unknown) and missing or malformed inventories (source unknown).
+Identifiers are generic; unit names, processes, PIDs, command arguments
+and user identity are not exported.
+
+This is a meaningful integration, not a new monitoring subsystem:
+previously the timer/service census was diagnostic-only and invisible
+to the shared automatic-suspend policy. A successful census still cannot
+verify every cron job, container, detached child or application-native
+scheduler. Zero observed services is **not** proof of absence of work.
+`scheduled_work_safe=False` and `coverage_complete=False` remain
+mandatory until genuinely comprehensive wake/workload authority exists.
+
+Finite current coverage contract:
+
+| Evidence | Safe inference for ISC 1.0 | Still unsupported |
+| --- | --- | --- |
+| `isc protect -- ...` and native inhibitors | A currently held sleep/idle inhibitor blocks sleep | Detached child work after the inhibitor's lifetime |
+| Selected same-user process candidates | Candidate identity is observed; lifecycle UNKNOWN | Any unobserved processes, human versus external wait |
+| systemd timer/service census | Waiting timers and active service states require further protection | Timer-to-task completion, missed units, cron, containers |
+| GNOME idle and session inhibitors | Current-session idle/inhibitor observation | Other sessions and background-work completion |
+| Agent hook events | Claimed observations for MONITOR | Authentication and full lifecycle coverage |
+
+No hardware sleep tests or ON mode activation are authorised by this
+integration.
+
+### Milestone 3 — practical protected-work command
+
+Added `isc protect -- COMMAND [ARGS...]`, a small operator-invoked
+wrapper around the existing Linux `systemd-inhibit` mechanism. When
+used to launch a foreground build or AI command, the kernel inhibitor
+blocks idle/sleep requests for the duration of that command and is
+released when the native wrapper exits. This is a **working protection
+feature**, not another event monitor or scheduler. The command is
+executed without a shell; ISC does not log arguments or alter persistent
+modes, GNOME settings or system services.
+
+**Boundary:** tasks that detach from the launched command or jobs not
+started through `isc protect` are **not** covered by that inhibitor
+once the foreground process exits. Existing independently scheduled
+jobs, other sessions and incomplete inventories remain UNKNOWN and must
+continue to prevent automatic sleep. This opt-in tool does not on its
+own justify enabling ON.
+
+No automatic suspend is enabled by implementing this command.
+
+**Next delivery task:** finish the minimal trusted workload/wake evidence
+needed to satisfy the guarded executor on an ordinary idle machine,
+without weakening unknown-work safety or adding another monitoring system.
