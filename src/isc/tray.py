@@ -373,13 +373,20 @@ class TrayController:
             )
             return
         Gtk = self.Gtk
-        is_wayland = reason == "wayland_mutter_standby_available"
+        is_wayland = reason in (
+            "wayland_mutter_standby_available",
+            "wayland_kscreen_dpms_available",
+        )
+        desktop_name = (
+            "KDE Plasma" if reason == "wayland_kscreen_dpms_available"
+            else "GNOME"
+        )
         prompt = Gtk.MessageDialog(
             transient_for=None, flags=Gtk.DialogFlags.MODAL,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.NONE,
             text=(
-                "Try GNOME Wayland monitor standby for 20 seconds?"
+                f"Try {desktop_name} Wayland monitor standby for 20 seconds?"
                 if is_wayland else "Put the monitors into standby?"
             ),
         )
@@ -387,7 +394,7 @@ class TrayController:
             (
                 "ISC will first schedule an independent 20-second "
                 "display recovery through systemd. Keyboard/mouse input "
-                "may NOT wake displays on all GNOME/NVIDIA hardware. "
+                "may NOT wake displays on all graphics hardware. "
                 "Keep the computer running; its workloads will continue. "
                 "Only try this if temporary black screens are acceptable."
             ) if is_wayland else (
