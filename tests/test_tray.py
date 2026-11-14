@@ -73,6 +73,15 @@ class TrayGnomePolicyTests(unittest.TestCase):
         controller._notice = Mock()
         return controller
 
+    def test_kde_tray_disables_gnome_policy_actions(self):
+        c = self._controller()
+        c._gnome_desktop = False
+        with patch("isc.tray.change_gnome_policy",
+                   side_effect=AssertionError("GNOME settings changed")):
+            c._gnome_policy_change("disable")
+            c._gnome_policy_change("restore")
+        c.Gtk.MessageDialog.assert_not_called()
+
     def test_invalid_operation_does_not_open_dialog_or_write_policy(self):
         c = self._controller()
         with patch("isc.tray.change_gnome_policy") as changed:
