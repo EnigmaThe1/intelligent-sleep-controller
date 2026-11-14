@@ -24,6 +24,7 @@ from .native_sleep import assess_native_sleep, request_native_sleep
 from .gnome_policy import (
     GnomePolicyError, change_gnome_policy, inspect_gnome_policy,
 )
+from .desktop_platform import detect_desktop_platform
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ class TrayController:
         self._monitor_process = TrayMonitorProcess()
         self._awake = KeepAwakeManager()
         self._monitor_state = "off"
+        self._gnome_desktop = detect_desktop_platform().desktop == "GNOME"
         self.indicator = Indicator.Indicator.new(
             "intelligent-sleep-controller",
             "system-suspend-symbolic",
@@ -141,10 +143,16 @@ class TrayController:
         self.profiles_menu.append(self._profile_unavailable)
         self.menu.append(self.profiles_item)
         self._item("Open System Power Settings…", self._open_system_power)
-        self._item("Disable GNOME Auto Sleep…",
-                   lambda item: self._gnome_policy_change("disable"))
-        self._item("Restore GNOME Auto Sleep…",
-                   lambda item: self._gnome_policy_change("restore"))
+        self._gnome_disable = self._item(
+            "Disable GNOME Auto Sleep…",
+            lambda item: self._gnome_policy_change("disable"),
+        )
+        self._gnome_restore = self._item(
+            "Restore GNOME Auto Sleep…",
+            lambda item: self._gnome_policy_change("restore"),
+        )
+        self._gnome_disable.set_sensitive(self._gnome_desktop)
+        self._gnome_restore.set_sensitive(self._gnome_desktop)
         self._separator()
         self.awake_menu_item = Gtk.MenuItem.new_with_label("Keep Awake")
         self.awake_submenu = Gtk.Menu()
@@ -301,11 +309,13 @@ class TrayController:
         try:
             open_power_settings()
         except NativeControlError as exc:
-            self._notice("Unable to open GNOME Power settings", str(exc), error=True)
+            self._notice("Unable to open desktop Power settings", str(exc), error=True)
 
     def _gnome_policy_change(self, operation: str) -> None:
-        """Confirmed GNOME policy change; independent of ISC OFF/MONITOR."""
+        """Confirmed GNOME-only policy; never write GNOME prefs on Plasma."""
         if operation not in ("disable", "restore"):
+            return
+        if getattr(self, "_gnome_desktop", True) is False:
             return
         Gtk = self.Gtk
         text = (
@@ -526,18 +536,21 @@ class TrayController:
             )
         elif health is not None:
             monitoring_detail += "\nBackground process census: UNKNOWN"
-        try:
-            power = inspect_gnome_policy()
-            if power.ac_timeout is None or power.battery_timeout is None:
+        if getattr(self, "_gnome_desktop", True) is False:
+            policy_line = "GNOME idle sleep policy: not applicable"
+        else:
+            try:
+                power = inspect_gnome_policy()
+                if power.ac_timeout is None or power.battery_timeout is None:
+                    policy_line = "GNOME idle sleep: UNKNOWN"
+                elif power.reason == "gnome_idle_disabled":
+                    policy_line = "GNOME idle sleep: disabled (AC and battery)"
+                elif power.reason == "gnome_idle_enabled":
+                    policy_line = "GNOME idle sleep: enabled"
+                else:
+                    policy_line = "GNOME idle sleep: conflicting or incomplete"
+            except (GnomePolicyError, OSError, ValueError):
                 policy_line = "GNOME idle sleep: UNKNOWN"
-            elif power.reason == "gnome_idle_disabled":
-                policy_line = "GNOME idle sleep: disabled (AC and battery)"
-            elif power.reason == "gnome_idle_enabled":
-                policy_line = "GNOME idle sleep: enabled"
-            else:
-                policy_line = "GNOME idle sleep: conflicting or incomplete"
-        except (GnomePolicyError, OSError, ValueError):
-            policy_line = "GNOME idle sleep: UNKNOWN"
         self._notice(
             "Intelligent Sleep Controller",
             f"Mode preference: {mode}\n"
