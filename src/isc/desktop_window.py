@@ -78,7 +78,7 @@ class DesktopWindow:
         intro = Gtk.Label(
             label="Local monitoring and manual controls. "
                   "ISC automatic suspension is unavailable. "
-                  "GNOME has separate automatic sleep settings."
+                  "Desktop automatic sleep settings are managed separately."
         )
         intro.set_xalign(0)
         intro.set_line_wrap(True)
@@ -119,7 +119,7 @@ class DesktopWindow:
 
         power_help = Gtk.Label(
             label="OFF disables ISC automatic sleep only. "
-                  "GNOME automatic sleep is managed separately."
+                  "Your desktop environment manages its own automatic sleep."
         )
         power_help.set_xalign(0)
         power_help.set_line_wrap(True)
@@ -218,7 +218,7 @@ class DesktopWindow:
         self.Gtk.main_quit()
 
     def open_system_power(self) -> None:
-        """Operator-clicked GNOME control center; does not change settings."""
+        """Operator-clicked native desktop settings; does not change settings."""
         try:
             open_power_settings()
         except NativeControlError:
@@ -371,7 +371,7 @@ class DesktopWindow:
             self, "_gnome_desktop", True,
         ) is False:
             power_label.set_text(
-                "GNOME idle sleep policy: not applicable to this desktop."
+                "Automatic sleep policy: use this desktop’s Power Settings."
             )
         elif power_label is not None:
             try:
