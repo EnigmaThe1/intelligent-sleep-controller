@@ -267,8 +267,17 @@ def display_off(*, confirm=False):
 
 
 def open_power_settings():
+    """Open the current desktop's settings; never launch GNOME on Plasma."""
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         raise NativeControlError("no_graphical_session")
+    desktop = detect_desktop_platform().desktop
+    if desktop == "GNOME":
+        command = ["gnome-control-center", "power"]
+    elif desktop == "KDE Plasma":
+        # Plasma's System Settings contains the Power Management KCM.
+        command = ["systemsettings"]
+    else:
+        raise NativeControlError("desktop_power_settings_unsupported")
     try:
         safe_env = {
             key: os.environ[key]
@@ -281,7 +290,7 @@ def open_power_settings():
             if key in os.environ
         }
         subprocess.Popen(
-            ["gnome-control-center", "power"],
+            command,
             env=safe_env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -289,4 +298,4 @@ def open_power_settings():
             close_fds=True,
         )
     except OSError:
-        raise NativeControlError("gnome_power_settings_unavailable") from None
+        raise NativeControlError("desktop_power_settings_unavailable") from None
