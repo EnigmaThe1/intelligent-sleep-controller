@@ -481,15 +481,36 @@ The OS remains the final authority, including authorization and inhibitors.
 A capability of \`yes\` does **not** prove that hibernate/resume will work on
 this machine; actual hardware testing is a separate, user-controlled step.
 
-**Turn Off Displays** uses X11 DPMS on Xorg and the GNOME Mutter
-`PowerSaveMode=1` (standby) on GNOME Wayland. It never powers down the
-computer, stops processing, or requests system suspend.
+**Turn Off Displays** detects the current display server and desktop
+before choosing a backend. The backend is then probed at runtime, rather
+than assuming a command exists simply because an environment variable
+contains a desktop name:
+
+| Display session | Native monitor standby | Current ISC support |
+| --- | --- | --- |
+| X11 / Xorg (GNOME, KDE, XFCE, Cinnamon and others) | `xset` DPMS | Supported when the X server confirms DPMS is enabled |
+| GNOME on Wayland (including Ubuntu GNOME) | Mutter `PowerSaveMode=1` | Supported with verified 20-second recovery timer |
+| KDE Plasma on Wayland | `kscreen-doctor --dpms off` | Supported when KScreen reports all outputs on, and a 20-second recovery timer is verified |
+| Other Wayland compositors (e.g. Sway, Hyprland) | Compositor-specific | Explicitly unsupported until tested; no guessed commands |
+
+XWayland's `DISPLAY` does **not** mean the session is X11.
+The desktop resolver uses `XDG_SESSION_TYPE` and the desktop identity;
+missing or contradictory information is treated as unknown. Where a
+native control cannot be verified, ISC refuses the action rather than
+trying another compositor's API. No host- or GPU-model assumptions are
+embedded in the selection.
+
+None of these actions powers down the computer, stops background work or
+requests system suspend. The operation is explicitly initiated by the
+user, not by the disarmed automatic ON controller.
 
 On Xorg, keyboard or mouse activity normally restores the displays.
-On GNOME Wayland, the compositor's direct power-state property is not
-guaranteed to wake from input on every driver/monitor combination.
-**ISC first arms a separate 20-second systemd --user recovery timer** that
-will request `PowerSaveMode=0` (on) even if the ISC tray exits. If the
+On GNOME or KDE Plasma Wayland, the compositor's direct power-state
+operation is not guaranteed to wake from input on every driver/monitor
+combination.
+**ISC first arms a separate 20-second systemd --user recovery timer**.
+It requests Mutter `PowerSaveMode=0` on GNOME, or `kscreen-doctor --dpms
+on` on KDE Plasma, even if the ISC tray exits. If the
 recovery timer cannot be armed and verified active, no Wayland standby
 request is made. The tray warns about the temporary black-screen risk
 before presenting the explicit action. Recovery is an attempted native
@@ -498,17 +519,28 @@ Only use this bounded Wayland option as a controlled hardware acceptance
 test until reliable input-driven wake is independently verified. Repeated
 requests may cause an earlier restore timer to wake the screen sooner.
 
-Recovery by the operator, if the monitor remains dark but a shell/SSH
-session is available:
+Recovery by the operator, if the monitor remains dark but a
+shell/SSH session to the original graphical user is available:
 
 ```bash
+# GNOME Wayland:
 busctl --user set-property org.gnome.Mutter.DisplayConfig \
   /org/gnome/Mutter/DisplayConfig org.gnome.Mutter.DisplayConfig \
   PowerSaveMode i 0
+
+# KDE Plasma Wayland:
+kscreen-doctor --dpms on
 ```
 
 Never run that recovery command as an automatic/background loop; it is
 for an already responsive, user-owned GNOME session only.
+
+GNOME-specific reversible idle-sleep settings are shown in the window
+and tray **only when GNOME is detected**; they are disabled on KDE rather
+than writing unrelated GNOME settings. On KDE, the desktop Power Settings
+button opens Plasma System Settings. Systemd/logind manual suspend and
+Keep Awake remain separate OS-level facilities, not X11- or Wayland-only
+operations.
 
 A power profile is displayed or offered only if the local power-profile
 service actually provides it. ISC does not install or impersonate that
