@@ -34,6 +34,29 @@ Missing information always blocks sleep, never silently downgrades safety.
 | **3 — Minimum trusted work protection** | Reuse existing process/cgroup/invocation, inhibitor, scheduled-service and agent-hook evidence. Define a finite set of supported/unsupported workloads and a deterministic fail-closed unknown classification; do not introduce a monitoring platform. | Test active build/AI task, detached child, external wait, scheduled work, failed hooks and stale samples. Every unverified case blocks sleep. |
 | **4 — Hardware verification & release** | Test suspend/resume, multi-monitor recovery, task persistence and controlled trial on non-critical hardware; verify installation, OFF enforcement, Keep Awake and clean uninstall/rollback. | Explicit operator approval for hardware trials; repeated reliable wake/recovery and no lost work. Release 1.0 only after all gates are green. |
 
+### Cross-desktop power backend selection (2026-11-14)
+
+A single side-effect-free resolver now distinguishes X11/Xorg from
+Wayland and identifies GNOME versus KDE Plasma without relying on a
+specific computer model, GPU vendor, monitor brand or Linux distribution.
+Display standby selects only confirmed native backends: X11 DPMS,
+GNOME Wayland Mutter or KDE Wayland KScreen. The last two require
+independently active, separately scheduled 20-second systemd recovery
+timers *before* the standby request. Unknown desktop/session, missing
+KScreen, unverified output state and failed recovery all block the action.
+
+The same desktop identity is used to select GNOME versus KDE native Power
+Settings, and to disable GNOME-specific idle-policy buttons on non-GNOME
+desktop environments. This does not enable automatic computer suspension
+or alter Keep Awake, systemd/logind, the persistent OFF/MONITOR preference
+or generic OS power-profile handling.
+
+Scope limit: do not add further compositor implementations to release 1.0
+without a verified native capability and an equally scoped recovery path.
+KDE standby is validated synthetically in CI; live KDE hardware wake
+acceptance is still outstanding, just as GNOME Wayland wake recovery
+must be tested cautiously on affected hardware.
+
 ## Release closeout — no further diagnostic expansion (2026-11-11)
 
 This is a **shipping plan**, not an open-ended research backlog.
