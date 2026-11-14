@@ -68,11 +68,14 @@ class NativeControlsTests(unittest.TestCase):
 
     @patch.dict(os.environ, {
         "XDG_SESSION_TYPE": "wayland", "DISPLAY": ":0",
-        "XDG_CURRENT_DESKTOP": "plasma:KDE",
+        "XDG_CURRENT_DESKTOP": "plasma:KDE", "WAYLAND_DISPLAY": "wayland-0",
     })
+    @patch("isc.native_controls.shutil.which", return_value=None)
     @patch("isc.native_controls._run")
-    def test_wayland_other_compositor_does_not_get_gnome_controls(self, run):
-        self.assertEqual(display_support(), (False, "requires_gnome_wayland"))
+    def test_kde_without_native_utility_is_not_incorrectly_supported(
+        self, run, which,
+    ):
+        self.assertEqual(display_support(), (False, "kscreen_dpms_unavailable"))
         with self.assertRaises(NativeControlError):
             display_off(confirm=True)
         run.assert_not_called()
@@ -228,6 +231,177 @@ class NativeControlsTests(unittest.TestCase):
             display_off(confirm=True)
         self.assertEqual(run.call_count, 5)
 
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_wayland_dpms_is_selected_only_when_outputs_are_on(
+        self, run, which,
+    ):
+        run.return_value = SimpleNamespace(
+            returncode=0,
+            stdout=("dpms mode for screen DP-1: on\n"
+                    "dpms mode for screen HDMI-A-1: on\n"),
+        )
+        self.assertEqual(display_support(),
+                         (True, "wayland_kscreen_dpms_available"))
+        run.assert_called_once_with([
+            "/usr/bin/kscreen-doctor", "--dpms", "show",
+        ])
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "PLASMA",
+        "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_wayland_refuses_mixed_or_unverifiable_dpms(
+        self, run, which,
+    ):
+        for output in (
+            "dpms mode for screen DP-1: on\ndpms mode for screen HDMI-A-1: off\n",
+            "unknown state\n",
+            "dpms mode for screen DP-1: on\nunknown line\n",
+            "",
+        ):
+            with self.subTest(output=output):
+                run.return_value = SimpleNamespace(returncode=0, stdout=output)
+                self.assertFalse(display_support()[0])
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls.secrets.token_hex",
+           return_value="0123456789abcdef")
+    @patch("isc.native_controls._run")
+    def test_kde_arms_verified_recovery_before_issuing_dpms_off(
+        self, run, token, which,
+    ):
+        mode = "dpms mode for screen DP-1: on\n"
+        run.side_effect = [
+            SimpleNamespace(returncode=0, stdout=mode),
+            SimpleNamespace(returncode=0, stdout=""),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0, stdout=mode),
+            SimpleNamespace(returncode=0, stdout=""),
+        ]
+        self.assertEqual(
+            display_off(confirm=True),
+            "display_standby_requested_with_20s_recovery",
+        )
+        calls = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(calls[0], ["/usr/bin/kscreen-doctor", "--dpms", "show"])
+        self.assertEqual(calls[1][:2], ["systemd-run", "--user"])
+        self.assertIn("--on-active=20s", calls[1])
+        self.assertIn("--setenv=WAYLAND_DISPLAY=wayland-0", calls[1])
+        self.assertIn("--setenv=QT_QPA_PLATFORM=wayland", calls[1])
+        self.assertEqual(calls[1][-3:],
+                         ["/usr/bin/kscreen-doctor", "--dpms", "on"])
+        self.assertEqual(calls[2], [
+            "systemctl", "--user", "is-active",
+            "isc-display-restore-0123456789abcdef.timer",
+        ])
+        self.assertEqual(calls[3], ["/usr/bin/kscreen-doctor", "--dpms", "show"])
+        self.assertEqual(calls[4], ["/usr/bin/kscreen-doctor", "--dpms", "off"])
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_cannot_blank_if_recovery_timer_is_unavailable(
+        self, run, which,
+    ):
+        run.side_effect = [
+            SimpleNamespace(returncode=0,
+                            stdout="dpms mode for screen DP-1: on\n"),
+            SimpleNamespace(returncode=1, stdout=""),
+        ]
+        with self.assertRaisesRegex(NativeControlError,
+                                    "wayland_recovery_timer_unavailable"):
+            display_off(confirm=True)
+        self.assertEqual(run.call_count, 2)
+        self.assertNotIn("off", repr(run.call_args_list))
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_native_status_change_cancels_standby(
+        self, run, which,
+    ):
+        run.side_effect = [
+            SimpleNamespace(returncode=0,
+                            stdout="dpms mode for screen DP-1: on\n"),
+            SimpleNamespace(returncode=0, stdout=""),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0,
+                            stdout="dpms mode for screen DP-1: off\n"),
+        ]
+        with self.assertRaisesRegex(NativeControlError,
+                                    "kscreen_display_changed_before_standby"):
+            display_off(confirm=True)
+        self.assertEqual(run.call_count, 4)
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_standby_command_failure_is_not_reported_as_success(
+        self, run, which,
+    ):
+        mode = "dpms mode for screen DP-1: on\n"
+        run.side_effect = [
+            SimpleNamespace(returncode=0, stdout=mode),
+            SimpleNamespace(returncode=0, stdout=""),
+            SimpleNamespace(returncode=0, stdout="active\n"),
+            SimpleNamespace(returncode=0, stdout=mode),
+            SimpleNamespace(returncode=1, stdout=""),
+        ]
+        with self.assertRaisesRegex(NativeControlError,
+                                    "kscreen_standby_request_failed"):
+            display_off(confirm=True)
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0",
+    })
+    @patch("isc.native_controls.shutil.which", return_value="/usr/bin/kscreen-doctor")
+    @patch("isc.native_controls._run")
+    def test_kde_recovery_rejects_malformed_wayland_socket(
+        self, run, which,
+    ):
+        from isc.native_controls import _schedule_wayland_display_restore
+        with patch.dict(os.environ, {"WAYLAND_DISPLAY": "wayland-0\nINJECTION"}):
+            self.assertFalse(_schedule_wayland_display_restore("kde-wayland"))
+        run.assert_not_called()
+
+    @patch.dict(os.environ, {
+        "XDG_SESSION_TYPE": "wayland", "XDG_CURRENT_DESKTOP": "KDE",
+        "WAYLAND_DISPLAY": "wayland-0", "PRIVATE_TOKEN": "do-not-forward",
+    })
+    @patch("isc.native_controls.subprocess.run")
+    def test_kde_utility_gets_wayland_socket_and_no_private_environment(
+        self, run,
+    ):
+        from isc.native_controls import _run
+        run.return_value = SimpleNamespace(returncode=0, stdout="")
+        _run(["/usr/bin/kscreen-doctor", "--dpms", "show"])
+        env = run.call_args.kwargs["env"]
+        self.assertEqual(env["QT_QPA_PLATFORM"], "wayland")
+        self.assertEqual(env["WAYLAND_DISPLAY"], "wayland-0")
+        self.assertNotIn("PRIVATE_TOKEN", env)
+
     @patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11", "DISPLAY": ":0"})
     @patch("isc.native_controls._run")
     def test_x11_dpms_off_without_system_suspend(self, run):
@@ -249,7 +423,7 @@ class NativeControlsTests(unittest.TestCase):
             display_off(confirm=True)
         run.assert_called_once_with(["xset", "q"])
 
-    @patch.dict(os.environ, {"DISPLAY": ":0"})
+    @patch.dict(os.environ, {"DISPLAY": ":0", "XDG_CURRENT_DESKTOP": "GNOME"})
     @patch("isc.native_controls.subprocess.Popen")
     def test_open_existing_os_power_options(self, spawn):
         open_power_settings()
@@ -257,8 +431,23 @@ class NativeControlsTests(unittest.TestCase):
         self.assertEqual(spawn.call_args.args[0],
                          ["gnome-control-center", "power"])
 
+    @patch.dict(os.environ, {"DISPLAY": ":0", "XDG_CURRENT_DESKTOP": "KDE"})
+    @patch("isc.native_controls.subprocess.Popen")
+    def test_kde_settings_launches_plasma_and_not_gnome(self, spawn):
+        open_power_settings()
+        self.assertEqual(spawn.call_args.args[0], ["systemsettings"])
+
+    @patch.dict(os.environ, {"DISPLAY": ":0", "XDG_CURRENT_DESKTOP": "sway",
+                             "XDG_SESSION_DESKTOP": "sway"})
+    @patch("isc.native_controls.subprocess.Popen")
+    def test_unknown_desktop_settings_refused_without_launch(self, spawn):
+        with self.assertRaisesRegex(NativeControlError, "unsupported"):
+            open_power_settings()
+        spawn.assert_not_called()
+
     @patch.dict(os.environ, {
-        "DISPLAY": ":0", "SECRET_AGENT_TOKEN": "NEVER_FORWARD",
+        "DISPLAY": ":0", "XDG_CURRENT_DESKTOP": "GNOME",
+        "SECRET_AGENT_TOKEN": "NEVER_FORWARD",
     })
     @patch("isc.native_controls.subprocess.Popen")
     def test_native_gui_does_not_inherit_unrelated_tokens(self, spawn):
