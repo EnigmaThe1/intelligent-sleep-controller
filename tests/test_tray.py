@@ -175,6 +175,19 @@ class TrayDisplayStandbyTests(unittest.TestCase):
         self.assertIn("workloads will continue", explanation)
         c.Gtk.MessageDialog.return_value.destroy.assert_called_once()
 
+    def test_kde_wayland_warning_and_confirmation_stay_bounded(self):
+        c = self._controller()
+        with patch("isc.tray.display_support",
+                   return_value=(True, "wayland_kscreen_dpms_available")), \
+             patch("isc.tray.display_off") as power:
+            c._display_off(None)
+        power.assert_not_called()
+        title = c.Gtk.MessageDialog.call_args.kwargs["text"]
+        self.assertIn("KDE Plasma Wayland", title)
+        self.assertIn("20 seconds", title)
+        detail = c.Gtk.MessageDialog.return_value.format_secondary_text.call_args.args[0]
+        self.assertIn("recovery through systemd", detail)
+
     def test_confirmed_wayland_standby_still_uses_guarded_native_function(self):
         c = self._controller(approval=True)
         with patch("isc.tray.display_support",
