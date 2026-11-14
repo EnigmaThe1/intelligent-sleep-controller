@@ -262,6 +262,34 @@ class DesktopWindowTests(unittest.TestCase):
             controller.status_label.set_text.call_args.args[0],
         )
 
+    def test_non_gnome_desktop_never_writes_gnome_power_policy(self):
+        controller = object.__new__(DesktopWindow)
+        controller._gnome_desktop = False
+        controller._confirm_power_policy = Mock(
+            side_effect=AssertionError("must not prompt on non-GNOME"))
+        with patch("isc.desktop_window.change_gnome_policy",
+                   side_effect=AssertionError("must not write")):
+            controller.change_power_policy("disable")
+            controller.change_power_policy("restore")
+        controller._confirm_power_policy.assert_not_called()
+
+    def test_non_gnome_status_skips_gnome_timeout_probe(self):
+        controller = object.__new__(DesktopWindow)
+        controller._gnome_desktop = False
+        controller.status_label = Mock()
+        controller.policy_label = Mock()
+        with patch("isc.desktop_window.read_mode",
+                   return_value=ModeStatus("monitor", True)), \
+             patch("isc.desktop_window.read_monitor_health",
+                   return_value=None), \
+             patch("isc.desktop_window.inspect_gnome_policy",
+                   side_effect=AssertionError("inapplicable GNOME policy")):
+            controller.refresh()
+        self.assertIn(
+            "not applicable",
+            controller.policy_label.set_text.call_args.args[0],
+        )
+
     def test_gnome_status_reports_external_change_without_trusting_it(self):
         controller = object.__new__(DesktopWindow)
         controller.status_label = Mock()
