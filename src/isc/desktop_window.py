@@ -18,6 +18,7 @@ from .keepawake import KeepAwakeError, KeepAwakeManager
 from .gnome_policy import (
     GnomePolicyError, change_gnome_policy, inspect_gnome_policy,
 )
+from .desktop_platform import detect_desktop_platform
 from .native_controls import NativeControlError, open_power_settings
 from .tray import backend_probe
 
@@ -61,6 +62,7 @@ class DesktopWindow:
         self.Gtk = Gtk
         self.GLib = GLib
         self._awake = KeepAwakeManager()
+        self._gnome_desktop = detect_desktop_platform().desktop == "GNOME"
         self.window = Gtk.Window(title="Intelligent Sleep Controller")
         self.window.set_default_size(680, 540)
         self.window.set_border_width(20)
@@ -139,9 +141,10 @@ class DesktopWindow:
             button.connect(
                 "clicked", lambda _, name=operation: self.change_power_policy(name),
             )
+            button.set_sensitive(self._gnome_desktop)
             power_buttons.pack_start(button, False, False, 0)
 
-        settings = Gtk.Button(label="Open GNOME Power Settings")
+        settings = Gtk.Button(label="Open Desktop Power Settings")
         settings.connect("clicked", lambda *_: self.open_system_power())
         content.pack_start(settings, False, False, 0)
         self.refresh()
@@ -220,8 +223,8 @@ class DesktopWindow:
             open_power_settings()
         except NativeControlError:
             self._message(
-                "GNOME Power Settings unavailable",
-                "Could not open GNOME Power Settings. No settings were changed.",
+                "Desktop Power Settings unavailable",
+                "Could not open this desktop's Power Settings. No settings were changed.",
                 error=True,
             )
 
@@ -257,8 +260,10 @@ class DesktopWindow:
             dialog.destroy()
 
     def change_power_policy(self, operation: str) -> None:
-        """An independently confirmed change, never implied by OFF/MONITOR."""
+        """An independently confirmed GNOME-only change, never an ISC mode."""
         if operation not in ("disable", "restore"):
+            return
+        if getattr(self, "_gnome_desktop", True) is False:
             return
         if not self._confirm_power_policy(operation):
             return
@@ -362,7 +367,13 @@ class DesktopWindow:
                 )
             awake_label.set_text(awake_text)
         power_label = getattr(self, "policy_label", None)
-        if power_label is not None:
+        if power_label is not None and getattr(
+            self, "_gnome_desktop", True,
+        ) is False:
+            power_label.set_text(
+                "GNOME idle sleep policy: not applicable to this desktop."
+            )
+        elif power_label is not None:
             try:
                 power = inspect_gnome_policy()
                 ac = (
