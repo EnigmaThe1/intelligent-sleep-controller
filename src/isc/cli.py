@@ -867,8 +867,15 @@ def display_off_cli(*, confirmed: bool) -> int:
         return 2
     if not confirmed:
         print("PREVIEW ONLY. Use display-off --confirm for an explicit action.")
-        if reason == "wayland_mutter_standby_available":
-            print("GNOME Wayland: 20-second recovery timer is required before standby.")
+        if reason in (
+            "wayland_mutter_standby_available",
+            "wayland_kscreen_dpms_available",
+        ):
+            desktop = (
+                "GNOME" if reason == "wayland_mutter_standby_available"
+                else "KDE Plasma"
+            )
+            print(desktop + " Wayland: 20-second recovery timer is required before standby.")
             print("Mouse/keyboard may not wake the displays; recovery is best-effort.")
         else:
             print("X11: keyboard or mouse normally wakes the displays.")
