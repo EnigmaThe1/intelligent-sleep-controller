@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 import re
 import secrets
+import shutil
 import subprocess
 from dataclasses import dataclass
+
+from .desktop_platform import detect_desktop_platform
 
 PROFILES = ("power-saver", "balanced", "performance")
 class NativeControlError(RuntimeError):
@@ -22,9 +25,17 @@ def _run(args):
         for name in (
             "PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
             "LANG", "LC_ALL", "TZ", "DISPLAY", "XAUTHORITY",
+            "WAYLAND_DISPLAY", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP",
         )
         if name in os.environ
     }
+    # KScreen requires the real Wayland socket even if XWayland DISPLAY exists.
+    # Never pass unrelated QT_* variables or private application environment.
+    if (
+        args and os.path.basename(args[0]) == "kscreen-doctor"
+        and detect_desktop_platform().display_backend == "kde-wayland"
+    ):
+        env["QT_QPA_PLATFORM"] = "wayland"
     try:
         return subprocess.run(
             args, env=env, check=False, text=True,
@@ -82,13 +93,44 @@ def _mutter_display_mode():
     return value if value in (-1, 0, 1, 2, 3) else None
 
 
+def _kscreen_doctor():
+    """Resolve the user's actual KDE utility, not a hard-coded distro path."""
+    path = shutil.which("kscreen-doctor")
+    if (
+        not isinstance(path, str) or not os.path.isabs(path)
+        or not re.fullmatch(r"/[A-Za-z0-9_./-]+", path)
+    ):
+        return None
+    return path
+
+
+def _kde_dpms_modes():
+    """Require a nonempty, fully understood KScreen per-output report."""
+    utility = _kscreen_doctor()
+    if utility is None or not os.environ.get("WAYLAND_DISPLAY"):
+        return None
+    result = _run([utility, "--dpms", "show"])
+    if result.returncode:
+        return None
+    output = result.stdout.splitlines()
+    if not output or len(output) > 16:
+        return None
+    modes = []
+    for line in output:
+        match = re.fullmatch(
+            r"dpms mode for screen [A-Za-z0-9_.:-]{1,100}: (on|off)",
+            line.strip(),
+        )
+        if match is None:
+            return None
+        modes.append(match.group(1))
+    return tuple(modes)
+
+
 def display_support():
-    session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    if session == "wayland":
-        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
-        # Do not touch other compositors, even if they expose XWayland.
-        if "gnome" not in desktop.lower().split(":"):
-            return False, "requires_gnome_wayland"
+    """Choose a tested display backend, then require actual native capability."""
+    backend = detect_desktop_platform().display_backend
+    if backend == "gnome-wayland":
         try:
             state = _mutter_display_mode()
         except NativeControlError:
@@ -99,7 +141,19 @@ def display_support():
             "mutter_display_unavailable" if state is None or state == -1
             else "mutter_display_not_on"
         )
-    if session != "x11":
+    if backend == "kde-wayland":
+        try:
+            modes = _kde_dpms_modes()
+        except NativeControlError:
+            modes = None
+        if modes is None:
+            return False, "kscreen_dpms_unavailable"
+        return (
+            (True, "wayland_kscreen_dpms_available")
+            if all(mode == "on" for mode in modes)
+            else (False, "kscreen_display_not_on")
+        )
+    if backend != "x11":
         return False, "unsupported_display_session"
     if not os.environ.get("DISPLAY"):
         return False, "no_display"
@@ -112,21 +166,41 @@ def display_support():
     return True, "x11_dpms_available"
 
 
-def _schedule_wayland_display_restore():
-    """Arm a distinct user-systemd recovery timer BEFORE blanking displays.
+def _schedule_wayland_display_restore(backend="gnome-wayland"):
+    """Arm a distinct, active user-systemd restore timer BEFORE standby.
 
-    The timer is independent of the ISC tray/window process. It requests
-    MUTTER ON after twenty seconds. Repeated user actions have independent
-    recovery timers and may therefore wake earlier than the latest request.
+    GNOME uses Mutter's session D-Bus property; KDE uses its installed
+    Wayland KScreen utility. No timer is considered verified until systemd
+    reports it active. Timer expiry is an attempted wake, never a guarantee.
     """
+    environment = []
+    if backend == "gnome-wayland":
+        command = [
+            "/usr/bin/busctl", "--user", "set-property",
+            *_MUTTER_PROPERTY, "i", "0",
+        ]
+    elif backend == "kde-wayland":
+        utility = _kscreen_doctor()
+        socket = os.environ.get("WAYLAND_DISPLAY", "")
+        # Strict socket token: do not pass arbitrary strings to systemd-run.
+        if (
+            utility is None or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", socket)
+        ):
+            return False
+        command = [utility, "--dpms", "on"]
+        environment = [
+            "--setenv=WAYLAND_DISPLAY=" + socket,
+            "--setenv=QT_QPA_PLATFORM=wayland",
+        ]
+    else:
+        return False
     unit = "isc-display-restore-" + secrets.token_hex(8)
     recovery = [
         "systemd-run", "--user", "--quiet",
         "--unit=" + unit,
         "--on-active=" + str(_WAYLAND_RESTORE_SECONDS) + "s",
         "--timer-property=AccuracySec=1s",
-        "/usr/bin/busctl", "--user", "set-property",
-        *_MUTTER_PROPERTY, "i", "0",
+        *environment, *command,
     ]
     result = _run(recovery)
     if result.returncode:
@@ -145,25 +219,49 @@ def display_off(*, confirm=False):
         if _run(["xset", "dpms", "force", "off"]).returncode:
             raise NativeControlError("display_request_failed")
         return "display_off_requested"
-    if reason == "wayland_mutter_standby_available":
-        # No direct Wayland power-state command is attempted until systemd
-        # has independently accepted and activated its recovery timer.
+    if reason in (
+        "wayland_mutter_standby_available", "wayland_kscreen_dpms_available",
+    ):
+        # Never blank a screen before the independent recovery timer exists.
+        backend = (
+            "gnome-wayland" if reason == "wayland_mutter_standby_available"
+            else "kde-wayland"
+        )
         try:
-            armed = _schedule_wayland_display_restore()
+            armed = _schedule_wayland_display_restore(backend)
         except (NativeControlError, OSError, ValueError, RuntimeError):
             armed = False
         if not armed:
             raise NativeControlError("wayland_recovery_timer_unavailable")
-        # Recheck for a concurrent compositor/session change.
-        try:
-            state = _mutter_display_mode()
-        except NativeControlError:
-            state = None
-        if state != 0:
-            raise NativeControlError("mutter_display_changed_before_standby")
-        if _run(["busctl", "--user", "set-property", *_MUTTER_PROPERTY,
-                 "i", "1"]).returncode:
-            raise NativeControlError("mutter_standby_request_failed")
+        if detect_desktop_platform().display_backend != backend:
+            raise NativeControlError("display_session_changed_before_standby")
+        if backend == "gnome-wayland":
+            try:
+                state = _mutter_display_mode()
+            except NativeControlError:
+                state = None
+            if state != 0:
+                raise NativeControlError("mutter_display_changed_before_standby")
+            command = [
+                "busctl", "--user", "set-property", *_MUTTER_PROPERTY, "i", "1",
+            ]
+        else:
+            try:
+                modes = _kde_dpms_modes()
+            except NativeControlError:
+                modes = None
+            if not modes or not all(mode == "on" for mode in modes):
+                raise NativeControlError("kscreen_display_changed_before_standby")
+            utility = _kscreen_doctor()
+            if utility is None:
+                raise NativeControlError("kscreen_dpms_unavailable")
+            command = [utility, "--dpms", "off"]
+        if _run(command).returncode:
+            raise NativeControlError(
+                "mutter_standby_request_failed"
+                if backend == "gnome-wayland"
+                else "kscreen_standby_request_failed"
+            )
         return "display_standby_requested_with_20s_recovery"
     raise NativeControlError("unsupported_display_session")
 
